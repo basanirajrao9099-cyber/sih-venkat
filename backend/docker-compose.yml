@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ayu_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ayu_user
+      POSTGRES_PASSWORD: ayu_password
+      POSTGRES_DB: ayu_trial_fabric
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ayu_user -d ayu_trial_fabric"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: ayu_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ayu_user:ayu_password@postgres:5432/ayu_trial_fabric
+      JWT_SECRET_KEY: ayu_trial_fabric_demo_secret_key_super_secure_2026_change_in_prod
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:

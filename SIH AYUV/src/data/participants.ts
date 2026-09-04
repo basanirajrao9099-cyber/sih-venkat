@@ -1,0 +1,137 @@
+import { ParticipantOpsItem } from '../types/trialOps';
+
+export const DEMO_PARTICIPANTS: ParticipantOpsItem[] = [
+  {
+    id: 'pt-ops-001',
+    participantId: 'PT-001',
+    site: 'Hyderabad Clinical Centre (SITE-001)',
+    siteId: 'SITE-001',
+    enrollmentDate: '2025-11-20',
+    visitStatus: 'Visit 3 Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm A (Investigational Formulation)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2025-11-15', notes: 'Prakriti: Vata-Pitta. Eligibility verified.' },
+      { step: 'Enrollment', status: 'completed', date: '2025-11-20', notes: 'Randomized to Arm A. First dispensation dispensed.' },
+      { step: 'Visit 1', status: 'completed', date: '2025-12-18', notes: 'Week 4 check. Blood labs normal. Compliance 98%.' },
+      { step: 'Visit 2', status: 'completed', date: '2026-01-16', notes: 'Week 8 interim review. CFS-11 score dropped by 40%.' },
+      { step: 'Visit 3', status: 'completed', date: '2026-02-14', notes: 'Week 12 primary endpoint completed. Final accountability done.' },
+    ]
+  },
+  {
+    id: 'pt-ops-002',
+    participantId: 'PT-002',
+    site: 'Hyderabad Clinical Centre (SITE-001)',
+    siteId: 'SITE-001',
+    enrollmentDate: '2025-11-28',
+    visitStatus: 'Visit 2 Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'Mild AE (Resolved)',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm B (Active Comparator)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2025-11-22', notes: 'Prakriti: Pitta-Kapha. Informed consent signed.' },
+      { step: 'Enrollment', status: 'completed', date: '2025-11-28', notes: 'Baseline vital signs recorded. Randomization completed.' },
+      { step: 'Visit 1', status: 'completed', date: '2025-12-26', notes: 'Mild dyspepsia logged; resolved with warm water anupana.' },
+      { step: 'Visit 2', status: 'completed', date: '2026-01-24', notes: 'Week 8 evaluation completed. Good compliance (94%).' },
+      { step: 'Visit 3', status: 'upcoming', date: '2026-03-24', notes: 'Scheduled for Week 12 primary outcome assessment.' },
+    ]
+  },
+  {
+    id: 'pt-ops-003',
+    participantId: 'PT-003',
+    site: 'Delhi Apex Research Hospital (SITE-002)',
+    siteId: 'SITE-002',
+    enrollmentDate: '2025-12-05',
+    visitStatus: 'Visit 2 Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm A (Investigational Formulation)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2025-11-30', notes: 'Prakriti: Kapha-Vata. All criteria met.' },
+      { step: 'Enrollment', status: 'completed', date: '2025-12-05', notes: 'Allocated to Arm A. Study drug supply dispensed.' },
+      { step: 'Visit 1', status: 'completed', date: '2026-01-04', notes: 'Week 4 safety assessment passed with 100% adherence.' },
+      { step: 'Visit 2', status: 'completed', date: '2026-02-02', notes: 'Midpoint biomarkers drawn. No safety issues reported.' },
+      { step: 'Visit 3', status: 'upcoming', date: '2026-03-15', notes: 'Scheduled for Week 12 wrap-up evaluation.' },
+    ]
+  },
+  {
+    id: 'pt-ops-004',
+    participantId: 'PT-004',
+    site: 'Jaipur Ayurvedic Institute (SITE-003)',
+    siteId: 'SITE-003',
+    enrollmentDate: '2025-12-14',
+    visitStatus: 'Visit 1 Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm A (Investigational Formulation)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2025-12-08', notes: 'Prakriti: Tridosha. Screening lab tests normal.' },
+      { step: 'Enrollment', status: 'completed', date: '2025-12-14', notes: 'Enrolled and randomized successfully.' },
+      { step: 'Visit 1', status: 'completed', date: '2026-01-12', notes: 'Week 4 visit completed. Medication adherence diary logged.' },
+      { step: 'Visit 2', status: 'current', date: '2026-03-08', notes: 'Window open (Day 56 ± 4 days).' },
+      { step: 'Visit 3', status: 'upcoming', date: '2026-04-05', notes: 'Pending Visit 2 milestone completion.' },
+    ]
+  },
+  {
+    id: 'pt-ops-005',
+    participantId: 'PT-005',
+    site: 'Jamnagar Center of Excellence (SITE-004)',
+    siteId: 'SITE-004',
+    enrollmentDate: '2026-01-05',
+    visitStatus: 'Visit 1 Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm B (Active Comparator)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2025-12-28', notes: 'Prakriti: Vata-Pitta. Inclusion verified.' },
+      { step: 'Enrollment', status: 'completed', date: '2026-01-05', notes: 'Informed consent signed in Gujarati & English.' },
+      { step: 'Visit 1', status: 'completed', date: '2026-02-03', notes: 'Week 4 compliance 96%. All vital signs normal.' },
+      { step: 'Visit 2', status: 'upcoming', date: '2026-03-28', notes: 'Scheduled for Week 8 assessment.' },
+      { step: 'Visit 3', status: 'upcoming', date: '2026-04-25', notes: 'Scheduled.' },
+    ]
+  },
+  {
+    id: 'pt-ops-006',
+    participantId: 'PT-006',
+    site: 'Mumbai KEM Hospital (SITE-005)',
+    siteId: 'SITE-005',
+    enrollmentDate: '2026-01-18',
+    visitStatus: 'Enrollment Complete',
+    consent: 'Signed (e-ICF v2.1)',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Arm A (Investigational Formulation)',
+    timeline: [
+      { step: 'Screening', status: 'completed', date: '2026-01-10', notes: 'Prakriti: Pitta-Kapha. Screening completed.' },
+      { step: 'Enrollment', status: 'completed', date: '2026-01-18', notes: 'Randomized and dispensed Bottle Batch #04.' },
+      { step: 'Visit 1', status: 'current', date: '2026-03-05', notes: 'Visit 1 window open (Week 4 assessment due).' },
+      { step: 'Visit 2', status: 'upcoming', date: '2026-04-02', notes: 'Pending Visit 1.' },
+      { step: 'Visit 3', status: 'upcoming', date: '2026-04-30', notes: 'Pending Visit 2.' },
+    ]
+  },
+  {
+    id: 'pt-ops-007',
+    participantId: 'PT-007',
+    site: 'Varanasi IMS Clinical Wing (SITE-006)',
+    siteId: 'SITE-006',
+    enrollmentDate: '2026-02-01',
+    visitStatus: 'Screening in Progress',
+    consent: 'Pending Signature',
+    safety: 'No AE',
+    protocolVersion: 'Protocol v1.0',
+    cohortArm: 'Pending Randomization',
+    timeline: [
+      { step: 'Screening', status: 'current', date: '2026-02-28', notes: 'Informed consent explanation underway with family.' },
+      { step: 'Enrollment', status: 'upcoming', notes: 'Scheduled pending written ICF return.' },
+      { step: 'Visit 1', status: 'upcoming', notes: 'Scheduled.' },
+      { step: 'Visit 2', status: 'upcoming', notes: 'Scheduled.' },
+      { step: 'Visit 3', status: 'upcoming', notes: 'Scheduled.' },
+    ]
+  }
+];

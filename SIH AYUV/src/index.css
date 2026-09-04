@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-main: #FAF9F4;
+    --bg-secondary: #F5F1E8;
+    --primary: #2E7D5B;
+    --primary-hover: #266B4D;
+    --sage: #7FAF91;
+    --herbal-gold: #C9A227;
+    --text-main: #26352D;
+    --text-muted: #66736B;
+    --card-bg: #FFFFFF;
+    --border-subtle: #E8E4D9;
+  }
+
+  body {
+    background-color: #FAF9F4;
+    color: #26352D;
+    font-family: 'Plus Jakarta Sans', 'Inter', 'Manrope', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Botanical Subtle Backdrop */
+.ayur-bg-pattern {
+  background-color: #FAF9F4;
+  background-image: radial-gradient(#2E7D5B 0.65px, transparent 0.65px), radial-gradient(#C9A227 0.65px, #FAF9F4 0.65px);
+  background-size: 26px 26px;
+  background-position: 0 0, 13px 13px;
+  background-opacity: 0.03;
+}
+
+/* Custom scrollbar for natural light theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5F1E8;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D5E6DC;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94BEA5;
+}
+
+/* Card Elevation & Glassmorphism */
+.ayur-card {
+  background: #FFFFFF;
+  border: 1px solid #E8E4D9;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px -4px rgba(46, 125, 91, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ayur-card-interactive:hover {
+  border-color: #7FAF91;
+  box-shadow: 0 8px 30px -4px rgba(46, 125, 91, 0.12), 0 4px 10px -1px rgba(0, 0, 0, 0.03);
+  transform: translateY(-2px);
+}
+
+.ayur-glass {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(232, 228, 217, 0.8);
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

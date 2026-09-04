@@ -1,0 +1,685 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Ayu-Trial Fabric - Core Intelligence & Governance API",
+    "description": "Part B Backend & Governance Compiler API for Ayu-Trial Fabric. Powers ChangeSet impact resolution, deterministic rule evaluation, obligations lifecycle, evidence verification, and immutable audit tracking.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/api/v1/trials": {
+      "get": {
+        "summary": "List all trials in the portfolio",
+        "operationId": "listTrials",
+        "responses": {
+          "200": {
+            "description": "Successful retrieval of clinical trials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/trials/{trialId}": {
+      "get": {
+        "summary": "Get trial details by ID",
+        "operationId": "getTrialById",
+        "parameters": [
+          {
+            "name": "trialId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trial details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/api/v1/changesets": {
+      "get": {
+        "summary": "List all ChangeSets",
+        "operationId": "listChangeSets",
+        "responses": {
+          "200": {
+            "description": "List of changesets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeSetsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create or propose a ChangeSet",
+        "operationId": "createChangeSet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSetRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "ChangeSet created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeSetSingleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          }
+        }
+      }
+    },
+    "/api/v1/changesets/{id}/impact": {
+      "get": {
+        "summary": "Retrieve the resolved impact graph and blast radius for a ChangeSet",
+        "operationId": "getChangeSetImpact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Impact graph and metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactReportResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compiler/run": {
+      "post": {
+        "summary": "Execute the governance compiler against a ChangeSet",
+        "description": "Evaluates rules, findings, obligations, and returns an immutable CompilationRun record.",
+        "operationId": "runCompiler",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compilation run results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompilationRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          }
+        }
+      }
+    },
+    "/api/v1/compiler/findings": {
+      "get": {
+        "summary": "Retrieve findings for a ChangeSet or compilation run",
+        "operationId": "getFindings",
+        "parameters": [
+          {
+            "name": "changeSetId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of findings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compiler/obligations": {
+      "get": {
+        "summary": "Retrieve governance obligations",
+        "operationId": "getObligations",
+        "parameters": [
+          {
+            "name": "changeSetId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of obligations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObligationsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compiler/evidence": {
+      "get": {
+        "summary": "Retrieve required evidence items and verification statuses",
+        "operationId": "getEvidenceList",
+        "parameters": [
+          {
+            "name": "changeSetId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of evidence items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/upload": {
+      "post": {
+        "summary": "Upload or verify an evidence artifact",
+        "operationId": "uploadEvidence",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence verified and recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compiler/readiness": {
+      "get": {
+        "summary": "Get implementation readiness summary",
+        "operationId": "getReadinessSummary",
+        "responses": {
+          "200": {
+            "description": "Readiness metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/trail": {
+      "get": {
+        "summary": "Fetch the chronological immutable audit trail",
+        "operationId": "getAuditTrail",
+        "parameters": [
+          {
+            "name": "changeSetId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable audit events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditTrailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClinicalTrial": {
+        "type": "object",
+        "required": ["id", "protocolId", "title", "phase", "status", "targetEnrollment"],
+        "properties": {
+          "id": { "type": "string", "example": "trial-001" },
+          "trialId": { "type": "string", "example": "ATF-001" },
+          "protocolId": { "type": "string", "example": "AYU-CT-2026-042" },
+          "title": { "type": "string" },
+          "shortTitle": { "type": "string" },
+          "system": { "type": "string", "enum": ["Ayurveda", "Yoga & Naturopathy", "Unani", "Siddha", "Homeopathy", "Integrative"] },
+          "phase": { "type": "string", "enum": ["Phase I", "Phase II", "Phase IIb", "Phase III", "Phase IV", "Observational"] },
+          "status": { "type": "string", "enum": ["recruiting", "active", "completed", "suspended", "draft", "ACTIVE", "RECRUITING"] },
+          "formulation": { "type": "string" },
+          "indication": { "type": "string" },
+          "targetEnrollment": { "type": "integer" },
+          "enrolledCount": { "type": "integer" },
+          "activeSites": { "type": "integer" },
+          "numberOfSites": { "type": "integer" },
+          "numberOfParticipants": { "type": "integer" },
+          "recruitmentPercentage": { "type": "number" },
+          "protocolVersion": { "type": "string" },
+          "startDate": { "type": "string" },
+          "estimatedEndDate": { "type": "string" },
+          "sponsor": { "type": "string" },
+          "ctriNumber": { "type": "string" },
+          "piName": { "type": "string" },
+          "leadInvestigator": { "type": "string" },
+          "activeAmendment": { "type": "string" },
+          "budgetAllocated": { "type": "number" },
+          "budgetUtilized": { "type": "number" },
+          "saeCount": { "type": "integer" },
+          "description": { "type": "string" }
+        }
+      },
+      "ChangeSetRecord": {
+        "type": "object",
+        "required": ["id", "trialId", "type", "previousState", "newState", "change", "affectedEntities", "status"],
+        "properties": {
+          "id": { "type": "string", "example": "CS-0001" },
+          "trialId": { "type": "string", "example": "ATF-001" },
+          "trialName": { "type": "string" },
+          "protocol": { "type": "string", "example": "v1.1" },
+          "type": { "type": "string", "example": "Protocol Amendment" },
+          "previousState": { "type": "string", "example": "Day 25–31" },
+          "newState": { "type": "string", "example": "Day 25–35" },
+          "change": { "type": "string", "example": "Visit 4 schedule: Day 25–31 → Day 25–35" },
+          "affectedEntities": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "effectiveDate": { "type": "string" },
+          "status": { "type": "string", "enum": ["SUBMITTED", "IN REVIEW", "APPROVED", "UNDER REVIEW"] },
+          "created": { "type": "string" }
+        }
+      },
+      "ImpactSummaryMetrics": {
+        "type": "object",
+        "required": ["sitesCount", "participantsCount", "visitsCount", "crfsCount", "edcMappingsCount", "ethicsAffected", "trainingAffected", "consentAffected"],
+        "properties": {
+          "sitesCount": { "type": "integer" },
+          "participantsCount": { "type": "integer" },
+          "visitsCount": { "type": "integer" },
+          "crfsCount": { "type": "integer" },
+          "edcMappingsCount": { "type": "integer" },
+          "ethicsAffected": { "type": "boolean" },
+          "trainingAffected": { "type": "boolean" },
+          "consentAffected": { "type": "boolean" }
+        }
+      },
+      "ImpactNode": {
+        "type": "object",
+        "required": ["id", "label", "entity", "category", "severity", "reason", "relationship", "relatedChangeSet"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "entity": { "type": "string" },
+          "category": { "type": "string", "enum": ["Root", "Sites", "Participants", "Protocol", "Systems", "Governance"] },
+          "severity": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW", "CRITICAL"] },
+          "reason": { "type": "string" },
+          "relationship": { "type": "string" },
+          "relatedChangeSet": { "type": "string" },
+          "parentId": { "type": "string" },
+          "hasChildren": { "type": "boolean" },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "number" },
+              "code": { "type": "string" },
+              "details": { "type": "string" }
+            }
+          }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "required": ["id", "type", "title", "description", "severity", "status"],
+        "properties": {
+          "id": { "type": "string", "example": "F-001" },
+          "type": { "type": "string", "enum": ["BLOCK", "WARNING"] },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "severity": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "status": { "type": "string", "enum": ["OPEN", "RESOLVED"] },
+          "rule": { "type": "string" },
+          "affectedEntity": { "type": "string" },
+          "obligationId": { "type": "string" }
+        }
+      },
+      "Obligation": {
+        "type": "object",
+        "required": ["id", "obligation", "owner", "status"],
+        "properties": {
+          "id": { "type": "string", "example": "OBL-01" },
+          "obligation": { "type": "string" },
+          "owner": { "type": "string" },
+          "status": { "type": "string", "enum": ["OPEN", "COMPLETED", "IN PROGRESS"] },
+          "deadline": { "type": "string" },
+          "severity": { "type": "string" },
+          "findingId": { "type": "string" }
+        }
+      },
+      "EvidenceItem": {
+        "type": "object",
+        "required": ["id", "title", "status", "buttonText"],
+        "properties": {
+          "id": { "type": "string", "example": "EVD-01" },
+          "title": { "type": "string" },
+          "status": { "type": "string", "enum": ["MISSING", "VERIFIED", "AVAILABLE"] },
+          "buttonText": { "type": "string" },
+          "fileHint": { "type": "string" },
+          "fileUrl": { "type": "string", "nullable": true },
+          "verifiedBy": { "type": "string", "nullable": true },
+          "verificationHash": { "type": "string", "nullable": true }
+        }
+      },
+      "ReadinessSummary": {
+        "type": "object",
+        "required": ["protocol", "changeSet", "sites", "participants", "blockingFindings", "warnings", "evidence", "status"],
+        "properties": {
+          "protocol": { "type": "string" },
+          "changeSet": { "type": "string" },
+          "sites": { "type": "integer" },
+          "participants": { "type": "integer" },
+          "blockingFindings": { "type": "integer" },
+          "warnings": { "type": "integer" },
+          "evidence": { "type": "string" },
+          "status": { "type": "string", "enum": ["BLOCKED", "READY"] }
+        }
+      },
+      "CompilationStep": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string", "enum": ["CHANGESET", "IMPACT", "COMPILE", "RULES", "FINDINGS", "OBLIGATIONS", "EVIDENCE", "VERIFICATION", "READY"] },
+          "status": { "type": "string", "enum": ["PENDING", "RUNNING", "PASSED", "FAILED"] }
+        }
+      },
+      "CompilationRunRequest": {
+        "type": "object",
+        "required": ["changeSetId", "trialId"],
+        "properties": {
+          "changeSetId": { "type": "string" },
+          "trialId": { "type": "string" },
+          "triggeredBy": { "type": "string" },
+          "pipeline": { "type": "string" }
+        }
+      },
+      "CompilationRunData": {
+        "type": "object",
+        "required": ["runId", "changeSetId", "trialId", "protocol", "timestamp", "status", "readiness", "pipelineSteps", "auditHash"],
+        "properties": {
+          "runId": { "type": "string", "example": "CMP-000128" },
+          "changeSetId": { "type": "string", "example": "CS-0001" },
+          "trialId": { "type": "string", "example": "ATF-001" },
+          "protocol": { "type": "string", "example": "v1.1" },
+          "timestamp": { "type": "string" },
+          "status": { "type": "string", "enum": ["PASSED", "FAILED", "RUNNING", "PENDING"] },
+          "readiness": { "$ref": "#/components/schemas/ReadinessSummary" },
+          "pipelineSteps": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CompilationStep" }
+          },
+          "auditHash": { "type": "string" }
+        }
+      },
+      "AuditTimelineEvent": {
+        "type": "object",
+        "required": ["step", "title", "timestamp", "actor", "description", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "step": { "type": "string", "example": "STEP 1" },
+          "title": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "actor": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["PASSED", "FAILED", "READY", "SUBMITTED", "WARNING"] },
+          "hash": { "type": "string" }
+        }
+      },
+      "EvidenceUploadRequest": {
+        "type": "object",
+        "required": ["evidenceId", "changeSetId"],
+        "properties": {
+          "evidenceId": { "type": "string" },
+          "changeSetId": { "type": "string" },
+          "fileContentBase64": { "type": "string" },
+          "fileName": { "type": "string" },
+          "actor": { "type": "string" }
+        }
+      },
+      "TrialsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/ClinicalTrial" } },
+          "total": { "type": "integer" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "TrialResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/ClinicalTrial" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ChangeSetsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/ChangeSetRecord" } },
+          "total": { "type": "integer" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ChangeSetSingleResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/ChangeSetRecord" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ImpactReportResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "changeSetId": { "type": "string" },
+              "trialId": { "type": "string" },
+              "summary": { "$ref": "#/components/schemas/ImpactSummaryMetrics" },
+              "nodes": { "type": "array", "items": { "$ref": "#/components/schemas/ImpactNode" } }
+            }
+          },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "CompilationRunResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/CompilationRunData" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "FindingsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Finding" } },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ObligationsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Obligation" } },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "EvidenceResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceItem" } },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "EvidenceUploadResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/EvidenceItem" },
+          "message": { "type": "string" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/ReadinessSummary" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "AuditTrailResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/AuditTimelineEvent" } },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "ApiErrorEnvelope": {
+        "type": "object",
+        "required": ["success", "error"],
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "timestamp"],
+            "properties": {
+              "code": { "type": "string", "example": "COMPILATION_BLOCKED" },
+              "message": { "type": "string", "example": "Build Failed: 3 Blockers found" },
+              "details": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "timestamp": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequestError": {
+        "description": "Invalid input or schema mismatch",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorEnvelope" }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorEnvelope" }
+          }
+        }
+      },
+      "UnprocessableEntityError": {
+        "description": "Validation or business rule error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorEnvelope" }
+          }
+        }
+      }
+    }
+  }
+}
