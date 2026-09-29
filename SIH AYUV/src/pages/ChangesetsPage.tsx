@@ -27,10 +27,13 @@ import { AmendmentTimeline } from '../components/amendments/AmendmentTimeline';
 
 import { useAuth } from '../hooks/useAuth';
 
+import { useTrial } from '../hooks/useTrialContext';
+
 export const ChangesetsPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { currentUser } = useAuth();
+  const { selectedTrial } = useTrial();
   const isPI = currentUser.role === 'Principal Investigator' || currentUser.role === 'Admin';
 
   const [changesets, setChangesets] = useState<ChangeSetRecord[]>([]);
@@ -66,7 +69,7 @@ export const ChangesetsPage: React.FC = () => {
       const [backendCS, liveSites, liveParticipants] = await Promise.all([
         compilerService.fetchChangeSets(),
         compilerService.fetchSites(),
-        compilerService.fetchParticipants('AYU-CT-2026-042'),
+        compilerService.fetchParticipants(selectedTrial.protocolId),
       ]);
 
       let combinedCS: ChangeSetRecord[] = [];
@@ -85,14 +88,19 @@ export const ChangesetsPage: React.FC = () => {
 
       setChangesets(combinedCS);
       if (combinedCS.length > 0) {
-        const selected = activeChangeSet
-          ? combinedCS.find((c) => c.id === activeChangeSet.id) || combinedCS[0]
-          : combinedCS[0];
-        setActiveChangeSet(selected);
+        // Find matching CS for selectedTrial
+        const matchingCS = combinedCS.find(
+          (c) => c.trialId === selectedTrial.protocolId || c.trialId === selectedTrial.id
+        ) || (selectedTrial.protocolId.includes('088') ? combinedCS.find((c) => c.id === 'CS-0002') : null)
+          || (selectedTrial.protocolId.includes('105') ? combinedCS.find((c) => c.id === 'CS-0003') : null)
+          || (selectedTrial.protocolId.includes('121') ? combinedCS.find((c) => c.id === 'CS-0004') : null)
+          || (selectedTrial.protocolId.includes('149') ? combinedCS.find((c) => c.id === 'CS-0005') : null)
+          || combinedCS[0];
 
-        // If active has already been impact analyzed, fetch impact report
-        if (selected.status === 'Impact analyzed' || selected.status === 'READY' || selected.status === 'SUBMITTED') {
-          fetchImpactForCS(selected.id);
+        setActiveChangeSet(matchingCS);
+
+        if (matchingCS && (matchingCS.status === 'Impact analyzed' || matchingCS.status === 'READY' || matchingCS.status === 'SUBMITTED' || matchingCS.status === 'IN REVIEW')) {
+          fetchImpactForCS(matchingCS.id);
         }
       }
 
@@ -107,7 +115,7 @@ export const ChangesetsPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedTrial.id, selectedTrial.protocolId]);
 
   const fetchImpactForCS = async (csId: string) => {
     try {

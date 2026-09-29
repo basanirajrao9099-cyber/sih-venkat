@@ -10,8 +10,12 @@ import { DEMO_PARTICIPANTS } from '../data/participants';
 import { ParticipantOpsItem, RandomizationResult } from '../types/trialOps';
 import { useToast } from '../hooks/useToast';
 
+import { useTrial } from '../hooks/useTrialContext';
+import { apiFetch } from '../services/api';
+
 export const ParticipantsPage: React.FC = () => {
   const { showToast } = useToast();
+  const { selectedTrial } = useTrial();
   const [participants, setParticipants] = useState<ParticipantOpsItem[]>(DEMO_PARTICIPANTS);
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
@@ -21,10 +25,12 @@ export const ParticipantsPage: React.FC = () => {
   React.useEffect(() => {
     const fetchLiveParticipants = async () => {
       try {
-        const res = await fetch('/api/v1/participants?trialId=AYU-2026-0001');
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list.length > 0) {
+        const list = await apiFetch<any[]>(
+          `/api/v1/participants?trialId=${encodeURIComponent(selectedTrial.protocolId)}`,
+          undefined,
+          DEMO_PARTICIPANTS
+        );
+        if (Array.isArray(list) && list.length > 0) {
             const mapped: ParticipantOpsItem[] = list.map((p: any) => ({
               id: p.id,
               participantId: p.participantId,
@@ -45,14 +51,13 @@ export const ParticipantsPage: React.FC = () => {
             }));
             setParticipants(mapped);
           }
-        }
       } catch (err) {
         console.warn('Participants live API unreachable, using local state', err);
       }
     };
 
     fetchLiveParticipants();
-  }, []);
+  }, [selectedTrial.id, selectedTrial.protocolId]);
 
   const filteredParticipants = participants.filter((p) => {
     const matchesSearch =

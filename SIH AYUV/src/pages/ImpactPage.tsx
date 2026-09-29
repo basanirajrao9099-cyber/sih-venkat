@@ -19,10 +19,13 @@ import {
 } from 'lucide-react';
 import { getStoredChangeSets, ChangeSetRecord } from '../data/changesets';
 import { useToast } from '../hooks/useToast';
+import { useTrial } from '../hooks/useTrialContext';
+import { apiFetch } from '../services/api';
 
 export const ImpactPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { selectedTrial } = useTrial();
 
   const [availableChangeSets, setAvailableChangeSets] = useState<ChangeSetRecord[]>([]);
   const [selectedCsId, setSelectedCsId] = useState<string>('CS-0001');
@@ -51,15 +54,15 @@ export const ImpactPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/changesets/${csId}/impact`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setImpactData(data);
-      if (Array.isArray(data.affectedSites)) {
-        setAffectedSitesList(data.affectedSites);
+      const data = await apiFetch<any>(`/api/v1/changesets/${csId}/impact`, undefined, null);
+      if (data) {
+        setImpactData(data);
+        if (Array.isArray(data.affectedSites)) {
+          setAffectedSitesList(data.affectedSites);
+        }
       }
     } catch (err) {
-      console.warn('Backend impact fetch fallback to local data:', err);
+      console.warn('Impact fetch note:', err);
     } finally {
       setLoading(false);
     }
@@ -69,25 +72,17 @@ export const ImpactPage: React.FC = () => {
     const loaded = getStoredChangeSets();
     if (loaded.length > 0) {
       setAvailableChangeSets(loaded);
-      setSelectedCsId(loaded[0].id);
-    }
+      const matching = loaded.find(
+        (c) => c.trialId === selectedTrial.protocolId || c.trialId === selectedTrial.id
+      ) || (selectedTrial.protocolId.includes('088') ? loaded.find((c) => c.id === 'CS-0002') : null)
+        || (selectedTrial.protocolId.includes('105') ? loaded.find((c) => c.id === 'CS-0003') : null)
+        || (selectedTrial.protocolId.includes('121') ? loaded.find((c) => c.id === 'CS-0004') : null)
+        || (selectedTrial.protocolId.includes('149') ? loaded.find((c) => c.id === 'CS-0005') : null)
+        || loaded[0];
 
-    const fetchLiveCS = async () => {
-      try {
-        const res = await fetch('/api/v1/changesets');
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list.length > 0) {
-            setAvailableChangeSets(list);
-            setSelectedCsId(list[0].id);
-          }
-        }
-      } catch {
-        // Fallback to local storage
-      }
-    };
-    fetchLiveCS();
-  }, []);
+      if (matching) setSelectedCsId(matching.id);
+    }
+  }, [selectedTrial.id, selectedTrial.protocolId]);
 
   useEffect(() => {
     if (selectedCsId) {

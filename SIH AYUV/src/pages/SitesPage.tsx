@@ -33,8 +33,12 @@ import { siteService } from '../services/siteService';
 import { DEMO_ROLES } from '../data/mockRoles';
 import { UserProfile } from '../types/user';
 
+import { useTrial } from '../hooks/useTrialContext';
+import { apiFetch } from '../services/api';
+
 export const SitesPage: React.FC = () => {
   const { showToast } = useToast();
+  const { selectedTrial } = useTrial();
   const [sites, setSites] = useState<SiteOpsItem[]>(DEMO_SITES);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -61,10 +65,8 @@ export const SitesPage: React.FC = () => {
       // fallback to initial user
     }
     try {
-      const res = await fetch('/api/v1/sites?changeSetId=CS-0001');
-      if (res.ok) {
-        const list = await res.json();
-        if (Array.isArray(list) && list.length > 0) {
+      const list = await apiFetch<any[]>('/api/v1/sites', undefined, DEMO_SITES);
+      if (Array.isArray(list) && list.length > 0) {
           const mapped: SiteOpsItem[] = list.map((s: any) => ({
             id: s.id,
             siteId: s.siteId,
@@ -103,7 +105,6 @@ export const SitesPage: React.FC = () => {
           }));
           setSites(mapped);
         }
-      }
     } catch (err) {
       console.warn('Sites live API unreachable, using local state', err);
     }
@@ -111,7 +112,7 @@ export const SitesPage: React.FC = () => {
 
   useEffect(() => {
     fetchLiveSites();
-  }, []);
+  }, [selectedTrial.id, selectedTrial.protocolId]);
 
   const openTrainingModal = async (site: SiteOpsItem) => {
     setSelectedTrainingSite(site);
