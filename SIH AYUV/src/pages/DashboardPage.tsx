@@ -16,17 +16,31 @@ import {
   Sparkles,
   UserCheck,
   Stethoscope,
+  Gamepad2,
+  Globe,
+  FileText,
+  Lock,
+  Layers,
+  Check,
+  HelpCircle,
+  Beaker,
+  AlertTriangle,
+  FileSpreadsheet,
+  Cpu,
 } from 'lucide-react';
 import { compilerService, EvidenceItem, Finding, ReadinessSummary } from '../services/compilerService';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
+import { useTrial } from '../hooks/useTrialContext';
 import { ReadinessDetailsModal } from '../components/common/ReadinessDetailsModal';
 import { ChangeSetRecord, getStoredChangeSets } from '../data/changesets';
+import { TrialSwitcherDropdown } from '../components/common/TrialSwitcherDropdown';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { currentUser } = useAuth();
+  const { selectedTrial, openGuide, openFetchModal } = useTrial();
 
   const isPI = currentUser.role === 'Principal Investigator';
   const isEthics = currentUser.role === 'Ethics Reviewer';
@@ -63,8 +77,7 @@ export const DashboardPage: React.FC = () => {
         if (eData) setEvidenceList(eData);
         if (fData) setFindings(fData);
         if (Array.isArray(aData) && aData.length > 0) {
-          // Show the 3 most recent real activity events (newest first)
-          setAuditEvents([...aData].reverse().slice(0, 3));
+          setAuditEvents([...aData].reverse().slice(0, 4));
         } else {
           setAuditEvents([]);
         }
@@ -75,7 +88,7 @@ export const DashboardPage: React.FC = () => {
       }
     };
     loadAll();
-  }, []);
+  }, [selectedTrial.id]);
 
   const isCertifiedReady = readiness.status === 'READY';
   const isReady = isCertifiedReady;
@@ -114,7 +127,7 @@ export const DashboardPage: React.FC = () => {
     readinessDisplayTag = 'MONITORING ACTIVE';
     nextActionLabel = 'Verify site training logs →';
     nextActionRoute = '/compiler';
-    nextActionDesc = 'Site training logs across 3 centers require CRA sign-off.';
+    nextActionDesc = 'Site training logs across centers require CRA sign-off.';
   } else if (isCsDraft) {
     readinessDisplayTag = 'DRAFT';
     nextActionLabel = 'Run impact analysis →';
@@ -135,13 +148,8 @@ export const DashboardPage: React.FC = () => {
     nextActionLabel = 'Review requirements →';
     nextActionRoute = `/compiler?changeSetId=${encodeURIComponent(activeCS?.id || 'CS-0001')}`;
     nextActionDesc = `Impact analysis completed. Resolve ${remainingCount} remaining statutory requirements.`;
-  } else if (missingEvidenceCount < 3) {
-    readinessDisplayTag = 'REQUIREMENTS IN PROGRESS';
-    nextActionLabel = 'Resolve requirements →';
-    nextActionRoute = '/compiler';
-    nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
   } else {
-    readinessDisplayTag = 'NOT READY';
+    readinessDisplayTag = 'REQUIREMENTS IN PROGRESS';
     nextActionLabel = 'Resolve requirements →';
     nextActionRoute = '/compiler';
     nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
@@ -197,41 +205,78 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
-      {/* 1. TRIAL OVERVIEW BANNER */}
+      {/* 0. GAME-LIKE ONBOARDING BANNER & CONTROLS HELPER */}
+      <section className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl border border-emerald-500/30 overflow-hidden relative">
+        <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] tracking-wider uppercase border border-emerald-500/30 flex items-center gap-1">
+                <Gamepad2 className="w-3 h-3" />
+                Interactive Game Guide & Controls Demo
+              </span>
+              <span className="text-xs text-slate-300">• New to Ayu-Trial Fabric?</span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+              What is Ayu-Trial Fabric & How Do You Control Medicine Trials?
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Whenever a trial protocol changes (visit windows, dosage, safety bounds), changes cannot simply be applied blindly.
+              You must follow a <strong>6-stage regulatory pipeline</strong>, attach required statutory evidence, and receive
+              cryptographic multi-role approval signatures.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={openGuide}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/30 hover:scale-[1.02] cursor-pointer"
+            >
+              <Gamepad2 className="w-4 h-4 animate-bounce" />
+              <span>Launch Controls Demo</span>
+            </button>
+            <button
+              onClick={openFetchModal}
+              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+            >
+              <Globe className="w-4 h-4 text-emerald-300" />
+              <span>+ Fetch Medicines from Web</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 1. DYNAMIC ACTIVE MEDICINE TRIAL OVERVIEW BANNER */}
       <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="font-mono text-xs font-bold text-[#1E4D38] bg-[#EAF4EF] px-2.5 py-0.5 rounded border border-[#C5DFD2]">
-                AYU-CT-2026-042
+                {selectedTrial.protocolId}
               </span>
-              <span className="text-xs text-[#5C6B62] font-medium">• Phase III</span>
+              <span className="text-xs text-[#5C6B62] font-semibold">• {selectedTrial.phase}</span>
+              {selectedTrial.ctriNumber && (
+                <span className="text-xs font-mono text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                  CTRI: {selectedTrial.ctriNumber}
+                </span>
+              )}
               <span className="text-xs text-[#5C6B62]">
-                {isEthics
-                  ? 'Institutional Ethics Committee (IEC-Central)'
-                  : isCRA
-                  ? 'Site Monitoring & Clinical QA'
-                  : 'Multi-Center Study'}
+                {selectedTrial.activeSites || 3} Apex Research Centers · {selectedTrial.targetEnrollment || 140} Subjects
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E2922]">
-              {isEthics
-                ? 'Ethics Review & Governance Workspace'
-                : isCRA
-                ? 'Clinical Site Monitoring & Operational Readiness'
-                : 'Ashwagandha–Guduchi PVFS Clinical Study'}
+              {selectedTrial.title}
             </h1>
             <p className="text-xs text-[#5C6B62] leading-relaxed max-w-2xl">
-              {isEthics
-                ? 'Expedited ethical oversight and regulatory clearance under NDCT Rules 2019 Rule 26 and ICMR 2017 standards.'
-                : isCRA
-                ? 'Operational site verification, coordinator training certifications, and source data compliance across 3 centers.'
-                : 'Evaluation of standardized Ayurvedic formulations in post-viral fatigue syndrome across 3 apex research centers.'}
+              <strong>Formulation:</strong> {selectedTrial.formulation} — <em>{selectedTrial.indication}</em>
+            </p>
+            <p className="text-[11px] text-slate-500">
+              <strong>Lead Investigator / Sponsor:</strong> {selectedTrial.piName || 'Prof. Dr. Anandita Sharma'} • {selectedTrial.sponsor}
             </p>
           </div>
 
-          {/* Clickable Active Context Widget */}
-          <div className="p-3.5 bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg text-xs space-y-1 text-left shrink-0 min-w-[210px]">
+          {/* Active Amendment & Readiness Gate Widget */}
+          <div className="p-3.5 bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg text-xs space-y-1.5 text-left shrink-0 min-w-[220px]">
             <button
               onClick={() => navigate(isEthics ? '/compiler' : isCRA ? '/sites' : '/changesets')}
               className="w-full text-left group cursor-pointer"
@@ -254,11 +299,11 @@ export const DashboardPage: React.FC = () => {
             {/* Clickable Readiness Gate Trigger */}
             <button
               onClick={() => setIsReadinessModalOpen(true)}
-              className="flex items-center gap-1.5 pt-1 hover:underline cursor-pointer"
+              className="flex items-center gap-1.5 pt-1 hover:underline cursor-pointer border-t border-slate-200 w-full"
               title="Click to view readiness gate details"
             >
               <span
-                className={`inline-block w-2 h-2 rounded-full ${
+                className={`inline-block w-2.5 h-2.5 rounded-full ${
                   isCertifiedReady
                     ? 'bg-[#1E4D38]'
                     : allGovernanceChecksCompleted
@@ -284,7 +329,141 @@ export const DashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 2. NEXT ACTION & 3. WORKSPACE PROGRESS */}
+      {/* 2. BIG & CLEAR INDICATION: HOW TO CONTROL MEDICINE TRIALS & APPROVAL AUDIT CENTER */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs space-y-6">
+        <div className="border-b border-[#E8E5DC] pb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-700" />
+            <h2 className="text-base font-bold text-[#1E2922] uppercase tracking-wide font-mono">
+              Medicine Protocol Control & Approval Verification Center
+            </h2>
+          </div>
+          <p className="text-xs text-[#5C6B62] mt-1">
+            Clear explanation of what changes can be made, statutory procedures, required files, and approver permissions.
+          </p>
+        </div>
+
+        {/* 4 Essential Control Columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: What Changes You Can Make */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm">
+              <Beaker className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">1. What You Can Change</h3>
+            <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+              <li><strong>Visit Windows:</strong> Extend or shrink visit days (e.g. Day 25–31 &rarr; Day 25–35).</li>
+              <li><strong>Herbal Formulations:</strong> Dosage timing & extract purity specs.</li>
+              <li><strong>Lab Biomarkers:</strong> Liver LFT & kidney KFT cutoff safety bounds.</li>
+              <li><strong>Inclusion Criteria:</strong> Age ranges and symptom severity thresholds.</li>
+            </ul>
+          </div>
+
+          {/* Card 2: Procedure You Must Follow */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-sm">
+              <Layers className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">2. Procedure to Follow</h3>
+            <ol className="text-xs text-slate-600 space-y-1 font-medium">
+              <li><span className="font-bold text-emerald-700">1. Draft:</span> Define protocol parameter diff.</li>
+              <li><span className="font-bold text-emerald-700">2. Impact:</span> Cohort impact analysis.</li>
+              <li><span className="font-bold text-emerald-700">3. Resolve:</span> Fix rule violations.</li>
+              <li><span className="font-bold text-emerald-700">4. Evidence:</span> Upload regulatory dossiers.</li>
+              <li><span className="font-bold text-emerald-700">5. Signatures:</span> PI + Ethics + CRA sign-off.</li>
+              <li><span className="font-bold text-emerald-700">6. Execute:</span> Lock with Merkle hash.</li>
+            </ol>
+          </div>
+
+          {/* Card 3: Files You Need */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm">
+              <FileText className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">3. Files Required</h3>
+            <ul className="text-xs text-slate-600 space-y-1.5">
+              <li className="flex items-start gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>EVD-01:</strong> IEC Notification Dossier (NDCT 2019 Rule 26)</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>EVD-02:</strong> Patient Consent Addendum v1.1 (ICMR 2017)</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>EVD-03:</strong> Site CRC Retraining Sign-off Log</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Card 4: Whose Permission Is Needed */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">4. Approvers Needed</h3>
+            <ul className="text-xs text-slate-600 space-y-1.5">
+              <li className="p-1 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px]">Lead PI (Prof. Dr. Sharma)</span>
+                <span className="text-[10px] text-emerald-700 font-semibold">Protocol Sign-off</span>
+              </li>
+              <li className="p-1 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px]">Ethics Chair (Dr. Kulkarni)</span>
+                <span className="text-[10px] text-amber-700 font-semibold">Expedited Ethics Clearance</span>
+              </li>
+              <li className="p-1 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px]">CRA Monitor (Priya Nair)</span>
+                <span className="text-[10px] text-sky-700 font-semibold">Site Readiness Verification</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Live Before vs After & Cryptographic Verification Indicator */}
+        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-950 font-mono">
+                Live Change Verification (Active Amendment CS-0001)
+              </span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-200/70 text-emerald-900 font-bold">
+              SHA-256 Merkle Chain Integrity: VERIFIED
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="bg-white p-3 rounded-lg border border-emerald-200">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Previous (Baseline)</span>
+              <p className="font-bold text-red-700 line-through mt-0.5">Visit 4 Window: Day 25–31</p>
+              <p className="text-[11px] text-slate-500 mt-1">Causes 7 participant dropouts due to narrow window.</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-emerald-200">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Proposed (Amended)</span>
+              <p className="font-bold text-emerald-700 mt-0.5">Visit 4 Window: Day 25–35 (+4 Days)</p>
+              <p className="text-[11px] text-slate-500 mt-1">Rescues 100% of participants without protocol breach.</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-emerald-200 flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Approval Signatures</span>
+                <p className="font-semibold text-slate-800 text-[11px] mt-0.5">
+                  {isCertifiedReady ? '✅ 3 of 3 Roles Approved' : '⏳ 2 of 3 Signatures Completed'}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/compiler')}
+                className="mt-2 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline text-left cursor-pointer"
+              >
+                Inspect full verification audit trail &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. NEXT ACTION & WORKSPACE PROGRESS */}
       <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E5DC] pb-5">
           <div className="space-y-1">
@@ -372,7 +551,7 @@ export const DashboardPage: React.FC = () => {
         <div className="divide-y divide-[#E8E5DC]">
           {isEthics ? (
             <>
-              {/* Ethics Task 1: IEC Notification Dossier */}
+              {/* Ethics Task 1 */}
               <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
@@ -393,7 +572,7 @@ export const DashboardPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Ethics Task 2: Consent Addendum */}
+              {/* Ethics Task 2 */}
               <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
@@ -403,7 +582,7 @@ export const DashboardPage: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-xs text-[#5C6B62]">
-                    Patient Information Sheet addendum for 47 active participants under ICMR 2017.
+                    Patient Information Sheet addendum for active participants under ICMR 2017.
                   </p>
                 </div>
                 <button
@@ -413,31 +592,10 @@ export const DashboardPage: React.FC = () => {
                   Review evidence
                 </button>
               </div>
-
-              {/* Ethics Task 3: Amendment Context */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">Protocol Amendment CS-0001 (Visit 4 Window)</span>
-                    <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                      Day 25–31 → Day 25–35
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Inspect before/after protocol parameters and clinical safety rationale.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/changesets')}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
-                >
-                  Inspect amendment
-                </button>
-              </div>
             </>
           ) : isCRA ? (
             <>
-              {/* CRA Task 1: Site Retraining Verification */}
+              {/* CRA Task 1 */}
               <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
@@ -447,7 +605,7 @@ export const DashboardPage: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-xs text-[#5C6B62]">
-                    Multi-center training sign-offs across AIIA Delhi, NIA Jaipur, and IPGT Jamnagar.
+                    Multi-center training sign-offs across research centers.
                   </p>
                 </div>
                 <button
@@ -455,27 +613,6 @@ export const DashboardPage: React.FC = () => {
                   className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
                 >
                   Verify training
-                </button>
-              </div>
-
-              {/* CRA Task 2: Study Sites Monitoring */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">3 Investigational Sites Approaching Visit 4</span>
-                    <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                      47 Active Subjects
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Review patient visit calendar synchronization and coordinator contacts.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/sites')}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
-                >
-                  View sites
                 </button>
               </div>
             </>
@@ -534,33 +671,6 @@ export const DashboardPage: React.FC = () => {
                   View sites
                 </button>
               </div>
-
-              {/* PI Task 3: Updated Consent */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">Updated informed consent (ICF Addendum)</span>
-                    {isReady ? (
-                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                        Verified
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        Awaiting verification
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Patient Information Sheet v1.1 addendum for active enrolled participants
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/compiler')}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
-                >
-                  View evidence
-                </button>
-              </div>
             </>
           )}
         </div>
@@ -575,13 +685,13 @@ export const DashboardPage: React.FC = () => {
               {isEthics ? 'Ethics Impact Scope' : isCRA ? 'Site Operational Scope' : 'Impact Summary'}
             </span>
             <p className="text-base font-bold text-[#1E2922]">
-              {readiness.sites} sites · {readiness.participants} participants · 1 visit · 1 CRF
+              {selectedTrial.activeSites || 3} sites · {selectedTrial.targetEnrollment || 140} participants · 1 visit · 1 CRF
             </p>
             <p className="text-xs text-[#5C6B62] leading-relaxed">
               {isEthics
-                ? 'Amendment affects Visit 4 window across 47 participants requiring ethics notification and consent addendum.'
+                ? 'Amendment affects Visit 4 window across active participants requiring ethics notification and consent addendum.'
                 : isCRA
-                ? 'Visit tolerance bounds updated across 3 investigational centers requiring CRC re-briefing.'
+                ? 'Visit tolerance bounds updated across study centers requiring CRC re-briefing.'
                 : 'This amendment affects visit windows and assessment schedules for ongoing participant cohorts.'}
             </p>
           </div>
@@ -602,7 +712,7 @@ export const DashboardPage: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-[#E8E5DC] pb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono">
-                {isEthics ? 'Recent Governance Decisions' : isCRA ? 'Recent Site Activity' : 'Recent Activity'}
+                Recent Audit Trail Activity
               </span>
               <Clock className="w-3.5 h-3.5 text-[#5C6B62]" />
             </div>

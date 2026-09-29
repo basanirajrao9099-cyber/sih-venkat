@@ -4,6 +4,8 @@ import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { Breadcrumbs } from '../components/navigation/Breadcrumbs';
 import { ToastContainer } from '../components/common/Toast';
+import { TrialControlsGuideModal } from '../components/common/TrialControlsGuideModal';
+import { FetchCTRIModal } from '../components/common/FetchCTRIModal';
 import { cn } from '../utils/cn';
 
 export const MainLayout: React.FC = () => {
@@ -36,6 +38,12 @@ export const MainLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Global Interactive Game / Controls Guide Modal */}
+      <TrialControlsGuideModal />
+
+      {/* Global Fetch CTRI Real-World Medicine Modal */}
+      <FetchCTRIModal />
 
       {/* Global Toast System */}
       <ToastContainer />

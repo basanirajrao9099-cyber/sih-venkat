@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Search, Bell, CheckCircle, Shield, X, ChevronRight, FileText, Building2, Users } from 'lucide-react';
+import { Menu, Search, Bell, Sparkles, HelpCircle, Gamepad2, Globe, ChevronRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { MOCK_TRIALS } from '../data/mockTrials';
+import { useTrial } from '../hooks/useTrialContext';
+import { TrialSwitcherDropdown } from '../components/common/TrialSwitcherDropdown';
 
 interface TopNavbarProps {
   onMenuClick: () => void;
@@ -21,14 +22,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { showToast } = useToast();
-  const [selectedTrialId] = useState<string>(MOCK_TRIALS[0].id);
+  const { selectedTrial, openGuide, openFetchModal } = useTrial();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
-
-  const selectedTrial = MOCK_TRIALS.find((t) => t.id === selectedTrialId) || MOCK_TRIALS[0];
 
   const notifications = [
     {
@@ -102,8 +101,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-6 bg-white/95 backdrop-blur-md border-b border-[#E8E5DC] shadow-xs">
-      {/* Left side: Hamburger & Trial Selector */}
-      <div className="flex items-center gap-3 md:gap-4 min-w-0">
+      {/* Left side: Hamburger & Medicine Trial Dropdown */}
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <button
           onClick={onMenuClick}
           className="p-2 rounded-lg text-[#5C6B62] hover:text-[#1E2922] hover:bg-[#FAF9F4] lg:hidden transition-colors cursor-pointer"
@@ -112,30 +111,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Active Study Context */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5C6B62] font-mono">
-              Active Protocol
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-xs text-[#1E2922]">
-                {selectedTrial.protocolId === 'AYU-2026-0001' ? 'AYU-CT-2026-042' : selectedTrial.protocolId}
-              </span>
-              <span className="text-[#8C9B91]">•</span>
-              <span className="text-xs text-[#5C6B62] font-medium hidden sm:inline">
-                {selectedTrial.shortTitle}
-              </span>
-              <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                {selectedTrial.phase}
-              </span>
-            </div>
-          </div>
-        </div>
+        {/* Dynamic Multi-Trial Dropdown */}
+        <TrialSwitcherDropdown />
       </div>
 
       {/* Center Search Bar with Dropdown Results */}
-      <div ref={searchRef} className="relative hidden md:flex items-center flex-1 max-w-md mx-6">
+      <div ref={searchRef} className="relative hidden lg:flex items-center flex-1 max-w-sm xl:max-w-md mx-4">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8C9B91]" />
           <input
@@ -143,17 +124,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => searchQuery.trim() && setIsSearchOpen(true)}
-            placeholder="Search amendments, sites, participants, evidence..."
-            className="w-full bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg pl-8 pr-8 py-1.5 text-xs text-[#1E2922] placeholder-[#8C9B91] focus:outline-none focus:bg-white focus:border-[#1E4D38] transition-all"
+            placeholder="Search amendments, sites, evidence..."
+            className="w-full bg-[#FAF9F4] border border-[#E2DFD6] rounded-xl pl-8 pr-8 py-1.5 text-xs text-[#1E2922] placeholder-[#8C9B91] focus:outline-none focus:bg-white focus:border-[#1E4D38] transition-all"
           />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C9B91] hover:text-[#1E2922] cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
         {/* Live Search Results Dropdown */}
@@ -191,8 +164,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
         )}
       </div>
 
-      {/* Right side: Notifications & Profile */}
-      <div className="flex items-center gap-3">
+      {/* Right side: Game Guide + Fetch CTRI + Notifications & Profile */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Game Guide Walkthrough Trigger */}
+        <button
+          onClick={openGuide}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white hover:from-emerald-700 hover:to-teal-800 text-xs font-bold shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+          title="Interactive Platform Guide & Controls Demo"
+        >
+          <Gamepad2 className="w-4 h-4 animate-bounce" />
+          <span className="hidden sm:inline">How It Works / Guide</span>
+        </button>
+
+        {/* Fetch More Medicines Shortcut */}
+        <button
+          onClick={openFetchModal}
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+          title="Fetch Live Clinical Trial from CTRI (Ministry of Ayush)"
+        >
+          <Globe className="w-3.5 h-3.5 text-emerald-600" />
+          <span>+ Import CTRI</span>
+        </button>
+
         {/* Notifications Dropdown */}
         <div className="relative">
           <button
@@ -241,14 +234,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center gap-2.5 pl-3 border-l border-[#E8E5DC]">
+        <div className="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-[#E8E5DC]">
           <img
             src={currentUser.avatar}
             alt={currentUser.name}
             className="w-8 h-8 rounded-full border border-[#C5DFD2] object-cover"
           />
-          <div className="hidden sm:block text-left">
-            <p className="text-xs font-bold text-[#1E2922] leading-tight truncate max-w-[150px]">
+          <div className="hidden md:block text-left">
+            <p className="text-xs font-bold text-[#1E2922] leading-tight truncate max-w-[130px]">
               {currentUser.name.split(',')[0]}
             </p>
             <p className="text-[10px] text-[#1E4D38] font-bold tracking-wide">
