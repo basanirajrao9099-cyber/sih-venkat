@@ -5,16 +5,21 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.governance import Finding, Obligation, EvidenceItem, CompilationRun
+from app.models.trial import SiteTrainingRecord
 from app.models.audit import AuditTrailRecord
 from app.services.audit_service import record_audit_event
+from app.services.training_service import compute_training_completion, get_impacted_sites_for_changeset
 from app.models.user import RoleName
 from app.auth.dependencies import require_governance_role
 from app.schemas.governance import (
     FindingSchema,
     ObligationSchema,
     EvidenceItemSchema,
+    SiteTrainingEvidenceSchema,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
+    ReadinessDimensionSchema,
+    ReadinessBlockerSchema,
     ReadinessSummarySchema,
     CompilationRunDataSchema,
     CompilationRunSummarySchema,
@@ -24,6 +29,380 @@ from app.schemas.governance import (
 from app.rules.models import EvaluationReport
 
 router = APIRouter(prefix="/api/v1/compiler", tags=["Governance Compiler"])
+
+
+def to_evidence_schema(e: EvidenceItem, db: Optional[Session] = None) -> EvidenceItemSchema:
+    status = e.status
+    button_text = e.button_text or "ADD EVIDENCE"
+    rejection_reason = e.rejection_reason
+    verified_by = e.verified_by
+    verified_at = e.verified_at.isoformat() if e.verified_at else None
+    affected_sites_count: Optional[int] = None
+    verified_sites_count: Optional[int] = None
+    site_evidence: Optional[List[SiteTrainingEvidenceSchema]] = None
+
+    if e.id == "EVD-03" and db is not None:
+        impacted_sites = get_impacted_sites_for_changeset(e.changeset_id or "CS-0001", db)
+        affected_sites_count = len(impacted_sites)
+        site_evidence = []
+        verified_count = 0
+        has_changes_requested = False
+        has_completed = False
+        changes_reason = None
+
+        for s in impacted_sites:
+            rec = db.query(SiteTrainingRecord).filter(
+                SiteTrainingRecord.site_id == s.id,
+                SiteTrainingRecord.change_set_id == (e.changeset_id or "CS-0001"),
+            ).first()
+
+            s_trn_status = rec.status if rec else "REQUIRED"
+            if s_trn_status == "VERIFIED":
+                s_evd_status = "VERIFIED"
+                s_ver_status = "VERIFIED"
+                verified_count += 1
+            elif s_trn_status == "COMPLETED":
+                s_evd_status = "AWAITING_REVIEW"
+                s_ver_status = "PENDING"
+                has_completed = True
+            elif s_trn_status in ["CHANGES_REQUESTED", "REJECTED"]:
+                s_evd_status = "CHANGES_REQUESTED"
+                s_ver_status = "CHANGES_REQUESTED"
+                has_changes_requested = True
+                if rec and rec.verification_note:
+                    changes_reason = rec.verification_note
+            elif s_trn_status == "IN_PROGRESS":
+                s_evd_status = "REQUIRED"
+                s_ver_status = "PENDING"
+            else:
+                s_trn_status = "REQUIRED"
+                s_evd_status = "REQUIRED"
+                s_ver_status = "PENDING"
+
+            site_evidence.append(
+                SiteTrainingEvidenceSchema(
+                    id=rec.id if rec else f"TRN-{s.id.upper()}-{e.changeset_id or 'CS-0001'}",
+                    siteId=s.site_id or s.id,
+                    siteCode=s.site_code or s.site_id,
+                    siteName=s.name or s.site_name,
+                    location=s.location or f"{s.city}, {s.state}",
+                    impactStatus="AFFECTED",
+                    trainingStatus=s_trn_status,
+                    evidenceStatus=s_evd_status,
+                    verificationStatus=s_ver_status,
+                    completedBy=rec.completed_by if rec else None,
+                    completedAt=rec.completed_at.isoformat() if rec and rec.completed_at else None,
+                    verifiedBy=rec.verified_by if rec else None,
+                    verifiedAt=rec.verified_at.isoformat() if rec and rec.verified_at else None,
+                    verificationNote=rec.verification_note if rec else None,
+                    rejectionReason=rec.verification_note if (rec and rec.status in ["CHANGES_REQUESTED", "REJECTED"]) else None,
+                )
+            )
+
+        verified_sites_count = verified_count
+
+        if has_changes_requested:
+            status = "REJECTED"
+            button_text = "RE-SUBMIT"
+            rejection_reason = changes_reason or e.rejection_reason or "Site training evidence requires revision."
+        elif affected_sites_count > 0 and verified_count == affected_sites_count:
+            status = "VERIFIED"
+            button_text = "VERIFIED"
+            rejection_reason = None
+            verified_by = verified_by or "Lead Clinical Monitor"
+        elif verified_count > 0 or has_completed or e.status == "SUBMITTED":
+            status = "SUBMITTED"
+            button_text = "AWAITING REVIEW"
+            rejection_reason = None
+        else:
+            status = e.status if e.status in ["AVAILABLE"] else "MISSING"
+            button_text = "SUBMIT EVIDENCE"
+            rejection_reason = None
+
+    return EvidenceItemSchema(
+        id=e.id,
+        title=e.title,
+        status=status,
+        buttonText=button_text,
+        fileHint=e.file_hint,
+        fileUrl=e.file_url,
+        documentType=e.document_type,
+        uploadedBy=e.uploaded_by,
+        uploaderRole=e.uploader_role,
+        fileName=e.file_name,
+        fileSizeBytes=e.file_size_bytes,
+        checksumSha256=e.checksum_sha256,
+        submittedAt=e.submitted_at.isoformat() if e.submitted_at else None,
+        verifiedBy=verified_by,
+        reviewerRole=e.reviewer_role,
+        verificationHash=e.verification_hash,
+        rejectionReason=rejection_reason,
+        verifiedAt=verified_at,
+        description=e.file_hint,
+        affectedSitesCount=affected_sites_count,
+        verifiedSitesCount=verified_sites_count,
+        siteEvidence=site_evidence,
+        isDemoFixture=e.is_demo_fixture,
+        source=e.source,
+    )
+
+
+def compute_readiness_summary(
+    changeSetId: Optional[str],
+    db: Session,
+    protocol: str = "v1.1",
+    sites_count: int = 3,
+    participants_count: int = 47,
+) -> ReadinessSummarySchema:
+    cs_id = changeSetId or "CS-0001"
+
+    blocking = db.query(Finding).filter(
+        Finding.changeset_id == cs_id,
+        Finding.type == "BLOCK",
+        Finding.status == "OPEN",
+    ).count()
+
+    warnings = db.query(Finding).filter(
+        Finding.changeset_id == cs_id,
+        Finding.type == "WARNING",
+    ).count()
+
+    evidence_items = db.query(EvidenceItem).filter(EvidenceItem.changeset_id == cs_id).all()
+    evidence_schemas = [to_evidence_schema(e, db) for e in evidence_items]
+    total_evidence = len(evidence_schemas)
+    verified_evidence = sum(1 for e in evidence_schemas if e.status in ["VERIFIED", "AVAILABLE"])
+    submitted_evidence = sum(1 for e in evidence_schemas if e.status in ["SUBMITTED", "VERIFIED", "AVAILABLE"])
+
+    evd_map = {e.id: e for e in evidence_schemas}
+    evd_01 = evd_map.get("EVD-01")
+    evd_02 = evd_map.get("EVD-02")
+    evd_03 = evd_map.get("EVD-03")
+
+    training_status = compute_training_completion(cs_id, db)
+    is_impact_complete = True
+    is_ethics_approved = bool(evd_01 and evd_01.status in ["VERIFIED", "AVAILABLE"])
+    is_training_completed = training_status.is_training_completed
+    is_consent_verified = bool(evd_02 and evd_02.status in ["VERIFIED", "AVAILABLE"])
+    is_evidence_submitted = (total_evidence > 0 and submitted_evidence == total_evidence)
+    is_evidence_verified = (total_evidence > 0 and verified_evidence == total_evidence)
+    is_compliance_resolved = (blocking == 0 and is_consent_verified)
+
+    remaining_reqs: List[str] = []
+    if not is_ethics_approved:
+        remaining_reqs.append("IEC approval")
+    if not is_training_completed:
+        remaining_reqs.append("Site retraining")
+    if not is_consent_verified:
+        remaining_reqs.append("Participant re-consent addendum")
+
+    if blocking > 0:
+        open_blockers = db.query(Finding).filter(
+            Finding.changeset_id == cs_id,
+            Finding.type == "BLOCK",
+            Finding.status == "OPEN",
+        ).all()
+        for f in open_blockers:
+            if f.id not in ["F-001", "F-002", "F-003"] and f.title not in remaining_reqs:
+                remaining_reqs.append(f.title)
+
+    is_ready_overall = (blocking == 0 and is_evidence_verified and is_training_completed)
+
+    last_run = db.query(CompilationRun).filter(
+        CompilationRun.changeset_id == cs_id
+    ).order_by(CompilationRun.created_at.desc()).first()
+
+    if is_ready_overall:
+        if last_run and last_run.status == "PASSED":
+            readiness_stage = "READY"
+        else:
+            readiness_stage = "READY_FOR_IMPLEMENTATION"
+    elif submitted_evidence > 0 or verified_evidence > 0:
+        readiness_stage = "REQUIREMENTS_IN_PROGRESS"
+    else:
+        readiness_stage = "NOT_READY"
+
+    dimensions = [
+        ReadinessDimensionSchema(
+            name="Impact",
+            status="COMPLETE",
+            details=f"Complete ({sites_count} sites, {participants_count} participants, 1 visit, 1 CRF)",
+            isComplete=True,
+        ),
+        ReadinessDimensionSchema(
+            name="Evidence",
+            status="COMPLETE" if is_evidence_verified else ("IN_PROGRESS" if submitted_evidence > 0 else "PENDING"),
+            details=f"{verified_evidence} / {total_evidence} verified",
+            isComplete=is_evidence_verified,
+        ),
+        ReadinessDimensionSchema(
+            name="Ethics review",
+            status="COMPLETE" if is_ethics_approved else "PENDING",
+            details="Approved" if is_ethics_approved else "IEC approval pending",
+            isComplete=is_ethics_approved,
+        ),
+        ReadinessDimensionSchema(
+            name="Training",
+            status="COMPLETE" if is_training_completed else "PENDING",
+            details=training_status.details,
+            isComplete=is_training_completed,
+        ),
+        ReadinessDimensionSchema(
+            name="Compliance",
+            status="COMPLETE" if is_compliance_resolved else "PENDING",
+            details="0 blocking findings" if is_compliance_resolved else f"{blocking} open blockers",
+            isComplete=is_compliance_resolved,
+        ),
+    ]
+
+    blockers: List[ReadinessBlockerSchema] = []
+
+    # 1. Site-level training blockers for affected sites
+    if evd_03 and evd_03.siteEvidence:
+        for site_ev in evd_03.siteEvidence:
+            if site_ev.impactStatus == "NOT_AFFECTED":
+                continue
+            if site_ev.trainingStatus == "REJECTED" or site_ev.evidenceStatus == "CHANGES_REQUESTED":
+                blockers.append(
+                    ReadinessBlockerSchema(
+                        id=f"BLK-TRAIN-{site_ev.siteId}",
+                        title=site_ev.siteName,
+                        requirementName="Training evidence",
+                        category="TRAINING",
+                        siteId=site_ev.siteId,
+                        siteName=site_ev.siteName,
+                        status="Changes requested",
+                        explanation=site_ev.rejectionReason or "Monitor requested changes to the training completion evidence.",
+                        suggestedAction="Resubmit training log (PI / Coordinator)",
+                        allowedRoles=["Principal Investigator", "Coordinator", "Admin"],
+                    )
+                )
+            elif site_ev.trainingStatus in ["REQUIRED", "IN_PROGRESS"] or site_ev.evidenceStatus == "REQUIRED":
+                blockers.append(
+                    ReadinessBlockerSchema(
+                        id=f"BLK-TRAIN-{site_ev.siteId}",
+                        title=site_ev.siteName,
+                        requirementName="Training completion",
+                        category="TRAINING",
+                        siteId=site_ev.siteId,
+                        siteName=site_ev.siteName,
+                        status="Required",
+                        explanation="Site training has not yet been completed.",
+                        suggestedAction="Complete site training (PI / Coordinator)",
+                        allowedRoles=["Principal Investigator", "Coordinator", "Admin"],
+                    )
+                )
+            elif site_ev.trainingStatus == "COMPLETED" and site_ev.verificationStatus in ["PENDING", "AWAITING_REVIEW"]:
+                blockers.append(
+                    ReadinessBlockerSchema(
+                        id=f"BLK-TRAIN-{site_ev.siteId}",
+                        title=site_ev.siteName,
+                        requirementName="Monitor verification",
+                        category="TRAINING",
+                        siteId=site_ev.siteId,
+                        siteName=site_ev.siteName,
+                        status="Awaiting review",
+                        explanation="Training completed by site; monitor verification pending.",
+                        suggestedAction="Verify site training (Monitor / CRA)",
+                        allowedRoles=["Monitor", "Admin"],
+                    )
+                )
+
+    # 2. Evidence blockers for EVD-01 and EVD-02
+    if not is_ethics_approved:
+        status_label = "Changes requested" if (evd_01 and evd_01.status == "REJECTED") else ("Awaiting review" if (evd_01 and evd_01.status == "SUBMITTED") else "Required")
+        explanation = (evd_01.rejectionReason if (evd_01 and evd_01.status == "REJECTED" and evd_01.rejectionReason) else "Institutional Ethics Committee sign-off required before protocol rollout.")
+        suggested_act = ("Review ethics clearance dossier (Ethics Reviewer)" if (evd_01 and evd_01.status == "SUBMITTED") else "Submit signed IEC notification receipt (PI / Coordinator)")
+        roles = ["Ethics Reviewer", "Admin"] if (evd_01 and evd_01.status == "SUBMITTED") else ["Principal Investigator", "Coordinator", "Admin"]
+        blockers.append(
+            ReadinessBlockerSchema(
+                id="BLK-EVD-01",
+                title="Institutional Ethics Committee",
+                requirementName="IEC Notification Dossier (EVD-01)",
+                category="ETHICS",
+                status=status_label,
+                explanation=explanation,
+                suggestedAction=suggested_act,
+                allowedRoles=roles,
+            )
+        )
+
+    if not is_consent_verified:
+        status_label = "Changes requested" if (evd_02 and evd_02.status == "REJECTED") else ("Awaiting review" if (evd_02 and evd_02.status == "SUBMITTED") else "Required")
+        explanation = (evd_02.rejectionReason if (evd_02 and evd_02.status == "REJECTED" and evd_02.rejectionReason) else "Approved participant re-consent addendum required.")
+        suggested_act = ("Verify consent addendum (Monitor / Ethics Reviewer)" if (evd_02 and evd_02.status == "SUBMITTED") else "Submit updated consent addendum (PI / Coordinator)")
+        roles = ["Monitor", "Ethics Reviewer", "Admin"] if (evd_02 and evd_02.status == "SUBMITTED") else ["Principal Investigator", "Coordinator", "Admin"]
+        blockers.append(
+            ReadinessBlockerSchema(
+                id="BLK-EVD-02",
+                title="Participant Re-Consent",
+                requirementName="Patient Information Sheet Addendum (EVD-02)",
+                category="EVIDENCE",
+                status=status_label,
+                explanation=explanation,
+                suggestedAction=suggested_act,
+                allowedRoles=roles,
+            )
+        )
+
+    # 3. Any other open blocking findings
+    if blocking > 0:
+        open_blockers = db.query(Finding).filter(
+            Finding.changeset_id == cs_id,
+            Finding.type == "BLOCK",
+            Finding.status == "OPEN",
+        ).all()
+        for f in open_blockers:
+            if f.id not in ["F-001", "F-002", "F-003"]:
+                blockers.append(
+                    ReadinessBlockerSchema(
+                        id=f"BLK-FINDING-{f.id}",
+                        title=f.title,
+                        requirementName=f.id,
+                        category="COMPLIANCE",
+                        status="Open",
+                        explanation=f.description,
+                        suggestedAction="Resolve compliance finding",
+                        allowedRoles=["Principal Investigator", "Admin"],
+                    )
+                )
+
+    if is_ready_overall:
+        blockers = []
+        overall_state = "READY"
+    else:
+        overall_state = "NOT READY"
+
+    return ReadinessSummarySchema(
+        protocol=protocol,
+        changeSet=cs_id,
+        sites=sites_count,
+        participants=participants_count,
+        blockingFindings=blocking,
+        warnings=warnings,
+        evidence=f"{verified_evidence} / {total_evidence}",
+        status="READY" if is_ready_overall else "BLOCKED",
+        overallState=overall_state,
+        readinessStage=readiness_stage,
+        remainingRequirementsCount=len(remaining_reqs),
+        remainingRequirements=remaining_reqs,
+        dimensions=dimensions,
+        blockers=blockers,
+        isImpactComplete=is_impact_complete,
+        isEvidenceSubmitted=is_evidence_submitted,
+        isEvidenceVerified=is_evidence_verified,
+        isEthicsApproved=is_ethics_approved,
+        isTrainingCompleted=is_training_completed,
+        isComplianceResolved=is_compliance_resolved,
+    )
+
+
+@router.get("/readiness", response_model=ReadinessSummarySchema)
+def get_readiness(
+    changeSetId: Optional[str] = Query("CS-0001"),
+    db: Session = Depends(get_db),
+):
+    """Calculate implementation readiness dynamically based on active workflow conditions."""
+    return compute_readiness_summary(changeSetId=changeSetId, db=db)
 
 
 @router.get("/findings", response_model=List[FindingSchema])
@@ -74,31 +453,6 @@ def get_obligations(
     ]
 
 
-def to_evidence_schema(e: EvidenceItem) -> EvidenceItemSchema:
-    return EvidenceItemSchema(
-        id=e.id,
-        title=e.title,
-        status=e.status,
-        buttonText=e.button_text or "ADD EVIDENCE",
-        fileHint=e.file_hint,
-        fileUrl=e.file_url,
-        documentType=e.document_type,
-        uploadedBy=e.uploaded_by,
-        uploaderRole=e.uploader_role,
-        fileName=e.file_name,
-        fileSizeBytes=e.file_size_bytes,
-        checksumSha256=e.checksum_sha256,
-        submittedAt=e.submitted_at.isoformat() if e.submitted_at else None,
-        verifiedBy=e.verified_by,
-        reviewerRole=e.reviewer_role,
-        verificationHash=e.verification_hash,
-        rejectionReason=e.rejection_reason,
-        verifiedAt=e.verified_at.isoformat() if e.verified_at else None,
-        isDemoFixture=e.is_demo_fixture,
-        source=e.source,
-    )
-
-
 @router.get("/evidence", response_model=List[EvidenceItemSchema])
 def get_evidence(
     changeSetId: Optional[str] = Query("CS-0001"),
@@ -106,45 +460,11 @@ def get_evidence(
 ):
     """Retrieve evidence checklist items."""
     evidence = db.query(EvidenceItem).filter(EvidenceItem.changeset_id == changeSetId).all()
-    return [to_evidence_schema(e) for e in evidence]
+    return [to_evidence_schema(e, db) for e in evidence]
 
 
 
-@router.get("/readiness", response_model=ReadinessSummarySchema)
-def get_readiness(
-    changeSetId: Optional[str] = Query("CS-0001"),
-    db: Session = Depends(get_db),
-):
-    """Calculate implementation readiness based on open blocking findings."""
-    blocking = db.query(Finding).filter(
-        Finding.changeset_id == changeSetId,
-        Finding.type == "BLOCK",
-        Finding.status == "OPEN",
-    ).count()
 
-    warnings = db.query(Finding).filter(
-        Finding.changeset_id == changeSetId,
-        Finding.type == "WARNING",
-    ).count()
-
-    total_evidence = db.query(EvidenceItem).filter(EvidenceItem.changeset_id == changeSetId).count()
-    verified_evidence = db.query(EvidenceItem).filter(
-        EvidenceItem.changeset_id == changeSetId,
-        EvidenceItem.status.in_(["VERIFIED", "AVAILABLE"]),
-    ).count()
-
-    is_ready = blocking == 0
-
-    return ReadinessSummarySchema(
-        protocol="v1.1",
-        changeSet=changeSetId or "CS-0001",
-        sites=3,
-        participants=47,
-        blockingFindings=blocking,
-        warnings=warnings,
-        evidence=f"{verified_evidence} / {total_evidence}",
-        status="READY" if is_ready else "BLOCKED",
-    )
 
 
 @router.get("/status")
@@ -293,6 +613,8 @@ def submit_evidence(
     evd.file_name = payload.fileName or "evidence_document.pdf"
     evd.file_size_bytes = payload.fileSizeBytes or 1048576
     evd.checksum_sha256 = payload.checksumSha256 or "0x7F9B2C1A8E3D"
+    if payload.description or payload.fileHint:
+        evd.file_hint = payload.description or payload.fileHint
     evd.submitted_at = datetime.now(timezone.utc)
     evd.rejection_reason = None # Clear prior rejection reason upon fresh resubmission
 
@@ -311,7 +633,7 @@ def submit_evidence(
     db.commit()
     db.refresh(evd)
 
-    return to_evidence_schema(evd)
+    return to_evidence_schema(evd, db)
 
 
 @router.post("/evidence/{evidence_id}/verify", response_model=EvidenceItemSchema)
@@ -350,9 +672,9 @@ def verify_evidence(
 
     # Idempotency checks
     if req.decision == "ACCEPT" and evd.status == "VERIFIED":
-        return to_evidence_schema(evd)
+        return to_evidence_schema(evd, db)
     if req.decision == "REJECT" and evd.status == "REJECTED":
-        return to_evidence_schema(evd)
+        return to_evidence_schema(evd, db)
 
     num = int(evidence_id.split("-")[-1])
     obl_id = f"OBL-{num:02d}"
@@ -381,6 +703,30 @@ def verify_evidence(
         if finding:
             finding.status = "RESOLVED"
 
+        if evidence_id == "EVD-03":
+            # Harmonize all impacted sites' SiteTrainingRecords to VERIFIED
+            impacted = get_impacted_sites_for_changeset(changeSetId, db)
+            for s in impacted:
+                trn = db.query(SiteTrainingRecord).filter(
+                    SiteTrainingRecord.site_id == s.id,
+                    SiteTrainingRecord.change_set_id == changeSetId,
+                ).first()
+                if not trn:
+                    trn = SiteTrainingRecord(
+                        id=f"TRN-{s.id.upper()}-{changeSetId}",
+                        site_id=s.id,
+                        change_set_id=changeSetId,
+                        requirement_code="REQ-TRN-01",
+                        requirement_name=f"Protocol Amendment {changeSetId} Site Staff Retraining",
+                    )
+                    db.add(trn)
+                trn.status = "VERIFIED"
+                trn.completed_at = trn.completed_at or datetime.now(timezone.utc)
+                trn.completed_by = trn.completed_by or req.verifiedBy or "Clinical Coordinator"
+                trn.verified_at = datetime.now(timezone.utc)
+                trn.verified_by = req.verifiedBy or "Lead Clinical Monitor"
+                trn.verification_note = req.comments or "Docket-level training verification"
+
         audit_desc = f"Verified & approved {evd.title}. Finding {find_id} resolved, obligation {obl_id} completed."
         audit_status = "PASSED"
     else: # REJECT
@@ -396,6 +742,17 @@ def verify_evidence(
             obl.status = "OPEN"
         if finding:
             finding.status = "OPEN"
+
+        if evidence_id == "EVD-03":
+            impacted = get_impacted_sites_for_changeset(changeSetId, db)
+            for s in impacted:
+                trn = db.query(SiteTrainingRecord).filter(
+                    SiteTrainingRecord.site_id == s.id,
+                    SiteTrainingRecord.change_set_id == changeSetId,
+                ).first()
+                if trn:
+                    trn.status = "CHANGES_REQUESTED"
+                    trn.verification_note = req.rejectionReason or req.comments or "Site training evidence requires revision."
 
         audit_desc = f"Evidence {evidence_id} rejected: {evd.rejection_reason}. Finding {find_id} remains BLOCK."
         audit_status = "FAILED"
@@ -416,7 +773,7 @@ def verify_evidence(
     db.commit()
     db.refresh(evd)
 
-    return to_evidence_schema(evd)
+    return to_evidence_schema(evd, db)
 
 
 
@@ -428,6 +785,25 @@ def reset_compiler_state(
     """
     Reset compiler demo state back to initial unverified state with open blockers.
     """
+    # Delete non-fixture findings/obligations/evidence for CS-0001
+    fixture_finding_ids = {"F-001", "F-002", "F-003", "F-004"}
+    db.query(Finding).filter(
+        Finding.changeset_id == changeSetId,
+        ~Finding.id.in_(fixture_finding_ids),
+    ).delete(synchronize_session=False)
+
+    fixture_obl_ids = {"OBL-01", "OBL-02", "OBL-03", "OBL-04"}
+    db.query(Obligation).filter(
+        Obligation.changeset_id == changeSetId,
+        ~Obligation.id.in_(fixture_obl_ids),
+    ).delete(synchronize_session=False)
+
+    fixture_evd_ids = {"EVD-01", "EVD-02", "EVD-03", "EVD-04"}
+    db.query(EvidenceItem).filter(
+        EvidenceItem.changeset_id == changeSetId,
+        ~EvidenceItem.id.in_(fixture_evd_ids),
+    ).delete(synchronize_session=False)
+
     for evd in db.query(EvidenceItem).filter(EvidenceItem.changeset_id == changeSetId).all():
         if evd.id != "EVD-04":
             evd.status = "MISSING"
@@ -435,10 +811,23 @@ def reset_compiler_state(
             evd.rejection_reason = None
             evd.verified_by = None
             evd.verified_at = None
+        evd.is_demo_fixture = True
+        evd.source = "seed"
+
     for obl in db.query(Obligation).filter(Obligation.changeset_id == changeSetId).all():
         obl.status = "OPEN"
+        obl.is_demo_fixture = True
+        obl.source = "seed"
+
     for f in db.query(Finding).filter(Finding.changeset_id == changeSetId).all():
         f.status = "OPEN"
+        f.is_demo_fixture = True
+        f.source = "seed"
+
+    # Delete non-fixture SiteTrainingRecords
+    db.query(SiteTrainingRecord).filter(
+        SiteTrainingRecord.change_set_id == changeSetId,
+    ).delete()
 
     # Reset run counter for CS-0001
     from app.models.governance import CompilationRunCounter

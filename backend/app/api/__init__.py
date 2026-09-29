@@ -9,6 +9,7 @@ from app.api.evidence import router as evidence_router
 from app.api.audit import router as audit_router
 from app.api.rules import router as rules_router
 from app.api.advisory import router as advisory_router
+from app.api.ctri import router as ctri_router
 
 api_router = APIRouter()
 
@@ -22,3 +23,5 @@ api_router.include_router(evidence_router)
 api_router.include_router(audit_router)
 api_router.include_router(rules_router)
 api_router.include_router(advisory_router)
+api_router.include_router(ctri_router)
+

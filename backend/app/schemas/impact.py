@@ -37,8 +37,24 @@ class ImpactNodeSchema(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
+class AffectedSiteSummarySchema(BaseModel):
+    id: str
+    siteId: str
+    siteCode: Optional[str] = None
+    name: str
+    location: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    impactStatus: str = "AFFECTED"
+    trainingStatus: str = "REQUIRED"
+    participantsCount: int = 0
+    investigator: Optional[str] = None
+    trialCtriNumber: Optional[str] = None
+
+
 class ImpactReportSchema(BaseModel):
     changeSetId: str
     trialId: str
     summary: ImpactSummaryMetricsSchema
     nodes: List[ImpactNodeSchema] = []
+    affectedSites: Optional[List[AffectedSiteSummarySchema]] = []

@@ -28,7 +28,26 @@ class Trial(Base):
     start_date = Column(String(32), default="2025-11-15")
     estimated_end_date = Column(String(32), default="2026-12-30")
     sponsor = Column(String(255), default="Central Council for Research in Ayurvedic Sciences (CCRAS)")
-    ctri_number = Column(String(64), default="CTRI/2025/11/059341")
+    ctri_number = Column(String(64), default="CTRI/2020/06/025557")
+    scientific_title = Column(String(512), nullable=True)
+    study_type = Column(String(128), default="Interventional")
+    study_design = Column(String(255), default="Randomized, Parallel Group, Active Controlled")
+    health_condition = Column(String(255), nullable=True)
+    intervention = Column(String(512), nullable=True)
+    comparator = Column(String(512), nullable=True)
+    primary_sponsor = Column(String(255), nullable=True)
+    secondary_sponsor = Column(String(255), nullable=True)
+    recruitment_status = Column(String(64), default="Completed")
+    first_enrollment_date = Column(String(32), nullable=True)
+    study_duration = Column(String(64), nullable=True)
+    target_sample_size = Column(Integer, nullable=True)
+    final_enrollment = Column(Integer, nullable=True)
+    country = Column(String(64), default="India")
+    source_registry = Column(String(64), default="CTRI")
+    source_url = Column(String(512), nullable=True)
+    source_fetched_at = Column(String(64), nullable=True)
+    source_hash = Column(String(128), nullable=True)
+    source_mode = Column(String(32), default="FIXTURE", nullable=True) # "LIVE" | "FIXTURE"
     pi_name = Column(String(255), default="Prof. Dr. Anandita Sharma")
     lead_investigator = Column(String(255), default="Dr. V. Sharma, MD (Ayu), PhD")
     active_amendment = Column(String(64), default="CS-0001")
@@ -42,6 +61,28 @@ class Trial(Base):
     sites = relationship("Site", back_populates="trial", cascade="all, delete-orphan")
     participants = relationship("Participant", back_populates="trial", cascade="all, delete-orphan")
     changesets = relationship("ChangeSet", back_populates="trial", cascade="all, delete-orphan")
+    version_snapshots = relationship("TrialVersionSnapshot", back_populates="trial", cascade="all, delete-orphan")
+
+
+class TrialVersionSnapshot(Base):
+    """
+    Append-only snapshot history of external CTRI registry records with deterministic hashes.
+    """
+    __tablename__ = "trial_version_snapshots"
+
+    id = Column(String(64), primary_key=True, index=True)
+    trial_id = Column(String(64), ForeignKey("trials.trial_id"), nullable=False, index=True)
+    ctri_number = Column(String(64), index=True, nullable=False)
+    version_number = Column(Integer, default=1, nullable=False)
+    source_hash = Column(String(128), nullable=False)
+    source_mode = Column(String(32), default="LIVE", nullable=False)
+    source_url = Column(String(512), nullable=True)
+    snapshot_payload = Column(JSON, nullable=False)
+    changed_fields = Column(JSON, default=list)
+    retrieved_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    trial = relationship("Trial", back_populates="version_snapshots")
+
 
 
 class Site(Base):
@@ -53,12 +94,20 @@ class Site(Base):
     site_code = Column(String(64), index=True, nullable=False) # e.g. "SITE-01-AIIA"
     name = Column(String(255), nullable=False)
     site_name = Column(String(255), nullable=True)
+    address = Column(String(512), nullable=True)
     city = Column(String(128), nullable=False)
     state = Column(String(128), nullable=False)
+    country = Column(String(64), default="India")
     location = Column(String(255), nullable=True)
     pi_name = Column(String(255), nullable=False)
     investigator = Column(String(255), nullable=True)
     contact_email = Column(String(255), nullable=False)
+    ethics_committee = Column(String(255), nullable=True)
+    ethics_approval_status = Column(String(64), default="Approved")
+    recruitment_status = Column(String(64), default="Open")
+    source_registry = Column(String(64), default="CTRI")
+    source_url = Column(String(512), nullable=True)
+    source_fetched_at = Column(String(64), nullable=True)
     status = Column(String(32), default="active")
     activation_status = Column(String(32), default="ACTIVE")
     governance_status = Column(String(32), default="READY")
@@ -75,3 +124,24 @@ class Site(Base):
 
     trial = relationship("Trial", back_populates="sites")
     site_participants = relationship("Participant", back_populates="site_rel", cascade="all, delete-orphan")
+
+
+class SiteTrainingRecord(Base):
+    __tablename__ = "site_training_records"
+
+    id = Column(String(64), primary_key=True, index=True) # e.g. "TRN-SITE-01-CS-0001"
+    change_set_id = Column(String(64), ForeignKey("changesets.id"), nullable=False, index=True)
+    site_id = Column(String(64), ForeignKey("sites.id"), nullable=False, index=True)
+    requirement_code = Column(String(64), nullable=False, default="REQ-TRN-01")
+    requirement_name = Column(String(255), nullable=False, default="Protocol Amendment Site Staff Retraining")
+    status = Column(String(32), nullable=False, default="REQUIRED") # 'REQUIRED' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED'
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    completed_by = Column(String(255), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    verified_by = Column(String(255), nullable=True)
+    verification_note = Column(String(512), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    site = relationship("Site", backref="training_records")
+

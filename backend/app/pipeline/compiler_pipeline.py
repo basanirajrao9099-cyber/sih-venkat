@@ -109,6 +109,21 @@ class CompilerPipeline:
             CompilationStepSchema(name="READY", status="PASSED" if is_passed else "PENDING"),
         ]
 
+        evidence_items = db.query(EvidenceItem).filter(EvidenceItem.changeset_id == cs_id).all()
+        stage = "READY" if is_passed else ("REQUIREMENTS_IN_PROGRESS" if verified_evidence > 0 else "NOT_READY")
+        from app.services.training_service import compute_training_completion
+        training_status = compute_training_completion(cs_id, db)
+        is_training_completed = training_status.is_training_completed
+
+        remaining_reqs = []
+        if open_blocks > 0 or verified_evidence < total_evidence or not is_training_completed:
+            if not any(e.id == "EVD-01" and e.status in ["VERIFIED", "AVAILABLE"] for e in evidence_items):
+                remaining_reqs.append("IEC approval")
+            if not is_training_completed:
+                remaining_reqs.append("Site retraining")
+            if not any(e.id == "EVD-02" and e.status in ["VERIFIED", "AVAILABLE"] for e in evidence_items):
+                remaining_reqs.append("Participant re-consent addendum")
+
         readiness = ReadinessSummarySchema(
             protocol=cs.protocol if cs else "v1.1",
             changeSet=cs_id,
@@ -118,6 +133,15 @@ class CompilerPipeline:
             warnings=open_warnings,
             evidence=f"{verified_evidence} / {total_evidence}",
             status=readiness_status,
+            readinessStage=stage,
+            remainingRequirementsCount=len(remaining_reqs),
+            remainingRequirements=remaining_reqs,
+            isImpactComplete=True,
+            isEvidenceSubmitted=(total_evidence > 0 and verified_evidence == total_evidence),
+            isEvidenceVerified=(total_evidence > 0 and verified_evidence == total_evidence),
+            isEthicsApproved=any(e.id == "EVD-01" and e.status in ["VERIFIED", "AVAILABLE"] for e in evidence_items),
+            isTrainingCompleted=is_training_completed,
+            isComplianceResolved=(open_blocks == 0),
         )
 
         # Record immutable CompilationRun in database

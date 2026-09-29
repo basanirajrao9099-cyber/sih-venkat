@@ -11,7 +11,7 @@ export const MainLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#FAF9F4] text-[#26352D] flex ayur-bg-pattern">
+    <div className="min-h-screen bg-[#FAF9F4] text-[#1E2922] flex">
       {/* Sidebar */}
       <Sidebar
         collapsed={collapsed}

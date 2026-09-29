@@ -29,12 +29,53 @@ export interface Obligation {
   status: 'OPEN' | 'COMPLETED' | 'IN PROGRESS';
 }
 
+import { SiteTrainingEvidence } from '../types/trialOps';
+
 export interface EvidenceItem {
   id: string;
   title: string;
-  status: 'MISSING' | 'VERIFIED' | 'AVAILABLE';
+  status: 'MISSING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | 'AVAILABLE';
   buttonText: string;
   fileHint?: string;
+  fileUrl?: string;
+  documentType?: string;
+  uploadedBy?: string;
+  uploaderRole?: string;
+  fileName?: string;
+  fileSizeBytes?: number;
+  checksumSha256?: string;
+  submittedAt?: string;
+  verifiedBy?: string;
+  reviewerRole?: string;
+  verificationHash?: string;
+  rejectionReason?: string;
+  verifiedAt?: string;
+  description?: string;
+  affectedSitesCount?: number;
+  verifiedSitesCount?: number;
+  siteEvidence?: SiteTrainingEvidence[];
+  isDemoFixture?: boolean;
+  source?: string;
+}
+
+export interface ReadinessBlocker {
+  id: string;
+  title: string;
+  requirementName: string;
+  category: 'TRAINING' | 'EVIDENCE' | 'ETHICS' | 'COMPLIANCE' | 'REGULATORY' | string;
+  siteId?: string;
+  siteName?: string;
+  status: string; // 'Changes requested' | 'Required' | 'Awaiting review' | 'Open' | string
+  explanation: string;
+  suggestedAction?: string;
+  allowedRoles?: string[];
+}
+
+export interface ReadinessDimension {
+  name: string;
+  status: 'COMPLETE' | 'PENDING' | 'IN_PROGRESS';
+  details?: string;
+  isComplete: boolean;
 }
 
 export interface ReadinessSummary {
@@ -46,6 +87,18 @@ export interface ReadinessSummary {
   warnings: number;
   evidence: string;
   status: 'BLOCKED' | 'READY';
+  overallState?: 'READY' | 'NOT READY';
+  readinessStage?: 'NOT_READY' | 'REQUIREMENTS_IN_PROGRESS' | 'READY_FOR_IMPLEMENTATION' | 'VALIDATING' | 'READY';
+  remainingRequirementsCount?: number;
+  remainingRequirements?: string[];
+  dimensions?: ReadinessDimension[];
+  blockers?: ReadinessBlocker[];
+  isImpactComplete?: boolean;
+  isEvidenceSubmitted?: boolean;
+  isEvidenceVerified?: boolean;
+  isEthicsApproved?: boolean;
+  isTrainingCompleted?: boolean;
+  isComplianceResolved?: boolean;
 }
 
 export const INITIAL_FINDINGS: Finding[] = [
@@ -156,6 +209,22 @@ export const compilerService = {
       warnings: 1,
       evidence: ready ? '4 / 4' : '1 / 4',
       status: ready ? 'READY' : 'BLOCKED',
+      readinessStage: ready ? 'READY' : 'NOT_READY',
+      remainingRequirementsCount: ready ? 0 : 2,
+      remainingRequirements: ready ? [] : ['IEC approval', 'Site retraining'],
+      dimensions: [
+        { name: 'Impact', status: 'COMPLETE', details: 'Complete (3 sites, 47 participants, 1 visit, 1 CRF)', isComplete: true },
+        { name: 'Evidence', status: ready ? 'COMPLETE' : 'IN_PROGRESS', details: ready ? '4 of 4 verified' : '1 of 4 verified', isComplete: ready },
+        { name: 'Ethics review', status: ready ? 'COMPLETE' : 'PENDING', details: ready ? 'Approved' : 'IEC approval pending', isComplete: ready },
+        { name: 'Training', status: ready ? 'COMPLETE' : 'PENDING', details: ready ? '3 of 3 sites completed' : 'Site retraining pending', isComplete: ready },
+        { name: 'Compliance', status: ready ? 'COMPLETE' : 'PENDING', details: ready ? '0 blocking findings' : '3 open blockers', isComplete: ready },
+      ],
+      isImpactComplete: true,
+      isEvidenceSubmitted: ready,
+      isEvidenceVerified: ready,
+      isEthicsApproved: ready,
+      isTrainingCompleted: ready,
+      isComplianceResolved: ready,
     };
   },
 
@@ -207,19 +276,158 @@ export const compilerService = {
     );
   },
 
+  submitEvidence: async (payload: {
+    evidenceId: string;
+    changeSetId?: string;
+    title?: string;
+    documentType?: string;
+    uploadedBy?: string;
+    uploaderRole?: string;
+    fileName?: string;
+    fileSizeBytes?: number;
+    checksumSha256?: string;
+    description?: string;
+    fileHint?: string;
+  }): Promise<EvidenceItem> => {
+    return apiFetch<EvidenceItem>(
+      '/api/v1/compiler/evidence/submit',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Role': payload.uploaderRole || 'Principal Investigator',
+        },
+        body: JSON.stringify({
+          evidenceId: payload.evidenceId,
+          changeSetId: payload.changeSetId || 'CS-0001',
+          title: payload.title,
+          documentType: payload.documentType || 'Regulatory Dossier',
+          uploadedBy: payload.uploadedBy || 'Dr. V. Sharma (Lead PI)',
+          uploaderRole: payload.uploaderRole || 'Principal Investigator',
+          fileName: payload.fileName || 'evidence_document.pdf',
+          fileSizeBytes: payload.fileSizeBytes || 1048576,
+          checksumSha256: payload.checksumSha256 || '0x7F9B2C1A8E3D',
+          fileHint: payload.description || payload.fileHint,
+          description: payload.description || payload.fileHint,
+        }),
+      }
+    );
+  },
+
   verifyEvidence: async (
     evidenceId: string,
     decision: 'ACCEPT' | 'REJECT' = 'ACCEPT',
-    changeSetId: string = 'CS-0001'
+    changeSetId: string = 'CS-0001',
+    comments?: string,
+    rejectionReason?: string,
+    verifiedBy?: string,
+    reviewerRole?: string
   ): Promise<any> => {
-    const role = evidenceId === 'EVD-03' ? 'Monitor' : 'Ethics Reviewer';
+    const defaultRole = evidenceId === 'EVD-03' ? 'Monitor' : 'Ethics Reviewer';
+    const role = reviewerRole || defaultRole;
     return apiFetch(
       `/api/v1/compiler/evidence/${encodeURIComponent(evidenceId)}/verify?changeSetId=${encodeURIComponent(changeSetId)}`,
       {
         method: 'POST',
-        headers: { 'X-User-Role': role },
-        body: JSON.stringify({ decision }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Role': role,
+        },
+        body: JSON.stringify({
+          decision,
+          comments: comments || rejectionReason,
+          rejectionReason: rejectionReason || comments,
+          verifiedBy: verifiedBy || (role === 'Monitor' ? 'Clinical Research Associate / Monitor' : 'Central Ethics Committee Chair'),
+          reviewerRole: role,
+        }),
       },
+      null
+    );
+  },
+
+  uploadEvidenceArtifact: async (
+    evidenceId: string,
+    fileName: string = 'dossier_signed.pdf',
+    changeSetId: string = 'CS-0001',
+    actor: string = 'Principal Investigator'
+  ): Promise<any> => {
+    return apiFetch(
+      '/api/v1/compiler/evidence/submit',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Role': actor,
+        },
+        body: JSON.stringify({
+          evidenceId,
+          changeSetId,
+          fileName,
+          uploadedBy: actor,
+          uploaderRole: actor,
+          checksumSha256: '0x7F9B2C1A8E3D',
+        }),
+      },
+      null
+    );
+  },
+
+  fetchAuditTrail: async (changeSetId: string = 'CS-0001'): Promise<any[]> => {
+    return apiFetch<any[]>(
+      `/api/v1/audit/trail?changeSetId=${encodeURIComponent(changeSetId)}`,
+      undefined,
+      []
+    );
+  },
+
+  fetchSites: async (): Promise<any[]> => {
+    return apiFetch<any[]>('/api/v1/sites', undefined, []);
+  },
+
+  fetchParticipants: async (trialId: string = 'AYU-2026-0001'): Promise<any[]> => {
+    return apiFetch<any[]>(
+      `/api/v1/participants?trialId=${encodeURIComponent(trialId)}`,
+      undefined,
+      []
+    );
+  },
+
+  fetchChangeSets: async (): Promise<any[]> => {
+    return apiFetch<any[]>('/api/v1/changesets', undefined, []);
+  },
+
+  fetchChangeSetById: async (id: string): Promise<any> => {
+    return apiFetch<any>(`/api/v1/changesets/${encodeURIComponent(id)}`, undefined, null);
+  },
+
+  createChangeSet: async (payload: any): Promise<any> => {
+    return apiFetch<any>(
+      '/api/v1/changesets',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      null
+    );
+  },
+
+  updateChangeSet: async (id: string, payload: any): Promise<any> => {
+    return apiFetch<any>(
+      `/api/v1/changesets/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      null
+    );
+  },
+
+  fetchImpactReport: async (changeSetId: string = 'CS-0001'): Promise<any> => {
+    return apiFetch<any>(
+      `/api/v1/changesets/${encodeURIComponent(changeSetId)}/impact`,
+      undefined,
       null
     );
   },

@@ -1,429 +1,661 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  FlaskConical,
-  Users,
-  Building2,
-  ShieldAlert,
-  TrendingUp,
   ArrowRight,
   CheckCircle2,
-  AlertTriangle,
-  FileCheck,
+  AlertCircle,
+  Clock,
+  Building2,
+  Users,
   Calendar,
-  Sparkles,
-  GitPullRequest,
-  Cpu,
-  Layers,
-  Database,
+  FileCheck,
+  ChevronRight,
+  ShieldCheck,
   Award,
   BookOpen,
-  ShieldCheck,
-  Sprout,
-  Activity,
+  Sparkles,
+  UserCheck,
+  Stethoscope,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { Badge } from '../components/common/Badge';
-import { Button } from '../components/common/Button';
-import { compilerService, ReadinessSummary } from '../services/compilerService';
+import { compilerService, EvidenceItem, Finding, ReadinessSummary } from '../services/compilerService';
+import { useToast } from '../hooks/useToast';
+import { useAuth } from '../hooks/useAuth';
+import { ReadinessDetailsModal } from '../components/common/ReadinessDetailsModal';
+import { ChangeSetRecord, getStoredChangeSets } from '../data/changesets';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const { currentUser } = useAuth();
+
+  const isPI = currentUser.role === 'Principal Investigator';
+  const isEthics = currentUser.role === 'Ethics Reviewer';
+  const isCRA = currentUser.role === 'Monitor';
+  const isAdmin = currentUser.role === 'Admin';
+
   const [readiness, setReadiness] = useState<ReadinessSummary>(compilerService.getReadiness());
+  const [evidenceList, setEvidenceList] = useState<EvidenceItem[]>(compilerService.getInitialEvidence());
+  const [findings, setFindings] = useState<Finding[]>(compilerService.getInitialFindings());
+  const [auditEvents, setAuditEvents] = useState<any[]>([]);
+  const [activeCS, setActiveCS] = useState<ChangeSetRecord | null>(null);
+  const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Refresh compiler readiness on mount
-    setReadiness(compilerService.getReadiness());
+    const loadAll = async () => {
+      try {
+        const [csList, rData, eData, fData, aData] = await Promise.all([
+          compilerService.fetchChangeSets(),
+          compilerService.fetchReadiness('CS-0001'),
+          compilerService.fetchEvidence('CS-0001'),
+          compilerService.fetchFindings('CS-0001'),
+          compilerService.fetchAuditTrail('CS-0001'),
+        ]);
+
+        if (Array.isArray(csList) && csList.length > 0) {
+          setActiveCS(csList[0]);
+        } else {
+          const stored = getStoredChangeSets();
+          if (stored.length > 0) setActiveCS(stored[0]);
+        }
+
+        if (rData) setReadiness(rData);
+        if (eData) setEvidenceList(eData);
+        if (fData) setFindings(fData);
+        if (Array.isArray(aData) && aData.length > 0) {
+          // Show the 3 most recent real activity events (newest first)
+          setAuditEvents([...aData].reverse().slice(0, 3));
+        } else {
+          setAuditEvents([]);
+        }
+      } catch (err) {
+        console.warn('Dashboard fetch error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAll();
   }, []);
 
-  const isReady = readiness.status === 'READY';
+  const isCertifiedReady = readiness.status === 'READY';
+  const isReady = isCertifiedReady;
+  const blockingCount = isReady ? 0 : readiness.blockingFindings;
+  const missingEvidenceCount = evidenceList.filter(
+    (e) => e.status !== 'VERIFIED' && e.id !== 'EVD-04'
+  ).length;
+
+  const remainingCount =
+    readiness.remainingRequirementsCount !== undefined
+      ? readiness.remainingRequirementsCount
+      : isCertifiedReady
+      ? 0
+      : Math.max(missingEvidenceCount, readiness.blockingFindings);
+
+  const allGovernanceChecksCompleted =
+    missingEvidenceCount === 0 && (readiness.blockingFindings === 0 || isCertifiedReady);
+
+  // Dynamic status and next action derived from actual backend changeset state
+  const csStatus = activeCS?.status || 'Draft';
+  const isCsDraft = csStatus === 'Draft' || csStatus === 'DRAFT';
+  const isCsImpactAnalyzed = csStatus === 'Impact analyzed';
+
+  // Role-specific Next Actions
+  let readinessDisplayTag = 'NOT READY';
+  let nextActionLabel = 'Resolve requirements →';
+  let nextActionRoute = '/compiler';
+  let nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
+
+  if (isEthics) {
+    readinessDisplayTag = 'IN REVIEW';
+    nextActionLabel = 'Review pending evidence dossiers →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = `${missingEvidenceCount > 0 ? missingEvidenceCount : 2} regulatory review items require committee decision.`;
+  } else if (isCRA) {
+    readinessDisplayTag = 'MONITORING ACTIVE';
+    nextActionLabel = 'Verify site training logs →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = 'Site training logs across 3 centers require CRA sign-off.';
+  } else if (isCsDraft) {
+    readinessDisplayTag = 'DRAFT';
+    nextActionLabel = 'Run impact analysis →';
+    nextActionRoute = '/changesets';
+    nextActionDesc = `Amendment ${activeCS?.id || 'CS-0001'} is saved as draft. Run impact analysis to evaluate affected sites and cohort.`;
+  } else if (isCertifiedReady) {
+    readinessDisplayTag = 'READY';
+    nextActionLabel = 'Prepare implementation →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = 'All required governance checks have been completed.';
+  } else if (allGovernanceChecksCompleted) {
+    readinessDisplayTag = 'READY FOR IMPLEMENTATION';
+    nextActionLabel = 'Validate amendment →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = 'All required governance checks have been completed.';
+  } else if (isCsImpactAnalyzed) {
+    readinessDisplayTag = 'IMPACT ANALYZED';
+    nextActionLabel = 'Review requirements →';
+    nextActionRoute = `/compiler?changeSetId=${encodeURIComponent(activeCS?.id || 'CS-0001')}`;
+    nextActionDesc = `Impact analysis completed. Resolve ${remainingCount} remaining statutory requirements.`;
+  } else if (missingEvidenceCount < 3) {
+    readinessDisplayTag = 'REQUIREMENTS IN PROGRESS';
+    nextActionLabel = 'Resolve requirements →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
+  } else {
+    readinessDisplayTag = 'NOT READY';
+    nextActionLabel = 'Resolve requirements →';
+    nextActionRoute = '/compiler';
+    nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
+  }
+
+  // Steppers tailored per role
+  const piSteps = [
+    { name: 'Draft', route: '/changesets', isCompleted: true, isCurrent: isCsDraft },
+    { name: 'Impact', route: '/impact', isCompleted: !isCsDraft, isCurrent: isCsImpactAnalyzed },
+    {
+      name: 'Resolve',
+      route: '/compiler',
+      isCompleted: isCertifiedReady,
+      isCurrent: !isCertifiedReady && !isCsDraft && missingEvidenceCount > 0,
+    },
+    {
+      name: 'Evidence',
+      route: '/compiler',
+      isCompleted: isCertifiedReady || missingEvidenceCount === 0,
+      isCurrent: !isCertifiedReady && !isCsDraft && missingEvidenceCount === 0,
+    },
+    { name: 'Review', route: '/ethics', isCompleted: isCertifiedReady, isCurrent: false },
+    { name: 'Ready', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: false },
+  ];
+
+  const ethicsSteps = [
+    { name: 'Submission', route: '/compiler', isCompleted: true, isCurrent: false },
+    { name: 'IEC Review', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: !isCertifiedReady },
+    { name: 'Findings', route: '/ethics', isCompleted: isCertifiedReady, isCurrent: false },
+    { name: 'Clearance', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: false },
+  ];
+
+  const craSteps = [
+    { name: 'Briefing', route: '/sites', isCompleted: true, isCurrent: false },
+    { name: 'Site Training', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: !isCertifiedReady },
+    { name: 'Logs Verified', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: false },
+    { name: 'Rollout', route: '/sites', isCompleted: isCertifiedReady, isCurrent: false },
+  ];
+
+  const activeSteps = isEthics ? ethicsSteps : isCRA ? craSteps : piSteps;
+
+  const handleStepClick = (step: (typeof activeSteps)[0]) => {
+    if (step.name === 'Ready' && !isCertifiedReady) {
+      showToast(
+        'Readiness Locked',
+        `${remainingCount} requirements remain before this amendment can be certified`,
+        'warning'
+      );
+      return;
+    }
+    navigate(step.route);
+  };
 
   return (
-    <div className="space-y-6">
-      {/* 1. HERO BANNER: AYURVEDA + AI + PERSONALIZED HEALTH */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-[#FAF9F4] to-[#F5F1E8] border border-[#E8E4D9] p-6 sm:p-8 shadow-sm">
-        {/* Subtle Ayurvedic botanical background accents */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-[#7FAF91]/15 to-transparent rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-10 right-20 w-48 h-48 bg-[#C9A227]/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-[#EAF4EF] text-[#2E7D5B] border border-[#7FAF91]/40">
-                <Sprout className="w-3.5 h-3.5 text-[#2E7D5B]" />
-                AI-Powered Ayurvedic Clinical Intelligence
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
+      {/* 1. TRIAL OVERVIEW BANNER */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-mono text-xs font-bold text-[#1E4D38] bg-[#EAF4EF] px-2.5 py-0.5 rounded border border-[#C5DFD2]">
+                AYU-CT-2026-042
               </span>
-              <span className="text-xs text-[#66736B] font-medium">• Central Orchestration</span>
+              <span className="text-xs text-[#5C6B62] font-medium">• Phase III</span>
+              <span className="text-xs text-[#5C6B62]">
+                {isEthics
+                  ? 'Institutional Ethics Committee (IEC-Central)'
+                  : isCRA
+                  ? 'Site Monitoring & Clinical QA'
+                  : 'Multi-Center Study'}
+              </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-[#26352D]">
-              AYU-TRIAL FABRIC
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E2922]">
+              {isEthics
+                ? 'Ethics Review & Governance Workspace'
+                : isCRA
+                ? 'Clinical Site Monitoring & Operational Readiness'
+                : 'Ashwagandha–Guduchi PVFS Clinical Study'}
             </h1>
-            <p className="text-sm text-[#66736B] leading-relaxed">
-              Standardized Ayurvedic botanical trial lifecycle platform with deterministic ChangeSet compilation, verifiable Merkle audit trails, and multi-site GCP compliance.
+            <p className="text-xs text-[#5C6B62] leading-relaxed max-w-2xl">
+              {isEthics
+                ? 'Expedited ethical oversight and regulatory clearance under NDCT Rules 2019 Rule 26 and ICMR 2017 standards.'
+                : isCRA
+                ? 'Operational site verification, coordinator training certifications, and source data compliance across 3 centers.'
+                : 'Evaluation of standardized Ayurvedic formulations in post-viral fatigue syndrome across 3 apex research centers.'}
             </p>
           </div>
 
-          {/* DEMO MODE & ACTION BUTTONS */}
-          <div className="flex items-center gap-3 shrink-0">
-            <Link to="/demo">
-              <Button
-                size="md"
-                className="bg-[#2E7D5B] hover:bg-[#246347] text-white font-bold shadow-md shadow-[#2E7D5B]/20 text-xs px-5 py-2.5 rounded-xl transition-all"
-                icon={<Sparkles className="w-4 h-4 text-[#FBF6E5]" />}
-              >
-                LAUNCH DEMO MODE
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. EXACT 6 KPI CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        {/* Active Trials: 1 */}
-        <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs space-y-1 hover:border-[#7FAF91] transition-colors">
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Active Trials</span>
-            <div className="p-1.5 rounded-lg bg-[#EAF4EF] text-[#2E7D5B]">
-              <FlaskConical className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#26352D]">1</div>
-          <p className="text-[10px] text-[#2E7D5B] font-mono font-medium">ATF-001 (Phase II/III)</p>
-        </div>
-
-        {/* Active Sites: 3 */}
-        <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs space-y-1 hover:border-[#7FAF91] transition-colors">
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Active Sites</span>
-            <div className="p-1.5 rounded-lg bg-[#FAF9F4] text-[#26352D]">
-              <Building2 className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#26352D]">3</div>
-          <p className="text-[10px] text-[#66736B]">Hyderabad, Delhi, Jaipur</p>
-        </div>
-
-        {/* Participants: 47 */}
-        <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs space-y-1 hover:border-[#7FAF91] transition-colors">
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Participants</span>
-            <div className="p-1.5 rounded-lg bg-[#FAF9F4] text-[#26352D]">
-              <Users className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#26352D]">47</div>
-          <p className="text-[10px] text-[#66736B]">In Active Cohort</p>
-        </div>
-
-        {/* Open ChangeSets: 1 */}
-        <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs space-y-1 hover:border-[#7FAF91] transition-colors">
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Open ChangeSets</span>
-            <div className="p-1.5 rounded-lg bg-[#FBF6E5] text-[#8D6F12]">
-              <GitPullRequest className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-[#26352D]">1</div>
-          <p className="text-[10px] text-[#8D6F12] font-mono font-medium">CS-0001 (In Review)</p>
-        </div>
-
-        {/* Pending Findings */}
-        <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs space-y-1 hover:border-[#7FAF91] transition-colors">
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Pending Findings</span>
-            <div className="p-1.5 rounded-lg bg-[#FEF9C3] text-[#92400E]">
-              <AlertTriangle className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className={`text-2xl font-black ${isReady ? 'text-[#2E7D5B]' : 'text-amber-700'}`}>
-            {readiness.blockingFindings}
-          </div>
-          <p className="text-[10px] text-[#66736B]">
-            {isReady ? 'All Resolved' : 'Governance Blockers'}
-          </p>
-        </div>
-
-        {/* Implementation Readiness */}
-        <div
-          className={`p-4 rounded-2xl border shadow-xs space-y-1 transition-colors ${
-            isReady
-              ? 'bg-[#EAF4EF] border-[#7FAF91]/60'
-              : 'bg-[#FDF2F2] border-[#FCA5A5]'
-          }`}
-        >
-          <div className="flex items-center justify-between text-[#66736B]">
-            <span className="text-[11px] font-semibold">Readiness Gate</span>
-            {isReady ? (
-              <CheckCircle2 className="w-4 h-4 text-[#2E7D5B]" />
-            ) : (
-              <ShieldAlert className="w-4 h-4 text-rose-600" />
-            )}
-          </div>
-          <div
-            className={`text-base font-black font-mono tracking-tight ${
-              isReady ? 'text-[#2E7D5B]' : 'text-rose-700'
-            }`}
-          >
-            {readiness.status}
-          </div>
-          <p className="text-[10px] text-[#66736B]">
-            {isReady ? 'Certified Rollout' : 'Pre-Flight Gates'}
-          </p>
-        </div>
-      </div>
-
-      {/* 3 & 4 & 5 & 6. MAIN CONTENT TWO-COLUMN GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT 2 COLUMNS: ACTIVE CHANGESET & IMPACT SNAPSHOT */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* 3. ACTIVE CHANGESET CARD */}
-          <Card className="p-6 bg-white border border-[#E8E4D9] shadow-sm space-y-4 rounded-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E8E4D9] pb-3.5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#2E7D5B] font-mono">
-                    ACTIVE AMENDMENT
-                  </span>
-                  <span className="font-mono text-xs font-bold text-[#2E7D5B] bg-[#EAF4EF] px-2.5 py-0.5 rounded-md border border-[#7FAF91]/40">
-                    CS-0001
-                  </span>
-                  <Badge variant="warning" size="sm" dot>
-                    IN REVIEW
-                  </Badge>
-                </div>
-                <h3 className="text-base font-bold text-[#26352D] mt-1">
-                  ATF-001 — AYU-TRIAL FABRIC Demonstration Trial
-                </h3>
-              </div>
-
-              {/* Required buttons: VIEW IMPACT and COMPILE */}
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  icon={<TrendingUp className="w-4 h-4 text-[#2E7D5B]" />}
-                  onClick={() => navigate('/impact')}
-                >
-                  VIEW IMPACT
-                </Button>
-                <Button
-                  size="sm"
-                  icon={<Cpu className="w-4 h-4" />}
-                  onClick={() => navigate('/compiler')}
-                >
-                  COMPILE
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] space-y-1">
-                <span className="text-[#66736B] text-[11px] font-medium">Target Protocol:</span>
-                <p className="font-mono text-sm font-bold text-[#2E7D5B]">Protocol v1.1</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] space-y-1">
-                <span className="text-[#66736B] text-[11px] font-medium">Visit 4 Schedule Change:</span>
-                <p className="font-mono text-xs font-bold">
-                  <span className="text-rose-600 line-through">Day 25–31</span> →{' '}
-                  <span className="text-[#2E7D5B]">Day 25–35</span>
-                </p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] space-y-1">
-                <span className="text-[#66736B] text-[11px] font-medium">Current Status:</span>
-                <p className="font-semibold text-amber-800">IN REVIEW (Rule Engine Active)</p>
-              </div>
-            </div>
-          </Card>
-
-          {/* 4. IMPACT SNAPSHOT */}
-          <Card className="p-6 bg-white border border-[#E8E4D9] shadow-sm space-y-4 rounded-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E8E4D9] pb-3.5">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#26352D] font-mono flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-[#2E7D5B]" />
-                  IMPACT SNAPSHOT
-                </h3>
-                <p className="text-xs text-[#66736B] mt-0.5">
-                  Automated dependency blast radius across clinical operations
-                </p>
-              </div>
-
-              {/* Button: VIEW FULL IMPACT */}
-              <Button
-                size="sm"
-                variant="outline"
-                icon={<ArrowRight className="w-4 h-4 text-[#2E7D5B]" />}
-                onClick={() => navigate('/impact')}
-              >
-                VIEW FULL IMPACT
-              </Button>
-            </div>
-
-            {/* Exactly 8 prompt items */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <Building2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">3 Sites</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <Users className="w-4 h-4 text-teal-700 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">47 Participants</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <Calendar className="w-4 h-4 text-amber-700 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">1 Visit</span>
-                  <span className="text-[10px] text-[#66736B]">Affected (V4)</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <FileCheck className="w-4 h-4 text-amber-800 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">1 CRF</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <Database className="w-4 h-4 text-blue-700 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">1 EDC Mapping</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <Award className="w-4 h-4 text-purple-700 shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">Ethics</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <BookOpen className="w-4 h-4 text-[#2E7D5B] shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">Training</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] flex items-center gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-[#2E7D5B] shrink-0" />
-                <div>
-                  <span className="font-bold text-[#26352D] block">Consent</span>
-                  <span className="text-[10px] text-[#66736B]">Affected</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* RIGHT 1 COLUMN: READINESS CARD & SYSTEM STATUS */}
-        <div className="space-y-6">
-          {/* 6. READINESS CARD */}
-          <Card
-            className={`p-6 space-y-4 border rounded-2xl shadow-sm transition-colors ${
-              isReady
-                ? 'bg-gradient-to-br from-white to-[#EAF4EF] border-[#7FAF91]'
-                : 'bg-gradient-to-br from-white to-[#FAF9F4] border-[#E8E4D9]'
-            }`}
-          >
-            <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#66736B] font-mono">
-                  GOVERNANCE GATE
-                </span>
-                <h3 className="text-sm font-bold text-[#26352D] mt-0.5">
-                  IMPLEMENTATION STATUS
-                </h3>
-              </div>
-              <Badge variant={isReady ? 'success' : 'danger'} size="md" dot className="font-mono font-bold">
-                {readiness.status}
-              </Badge>
-            </div>
-
-            <div className="p-4 rounded-xl bg-white border border-[#E8E4D9] space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[#66736B]">Blocking Findings:</span>
-                <span className={`font-bold ${isReady ? 'text-[#2E7D5B]' : 'text-rose-600'}`}>
-                  {readiness.blockingFindings} Blocking Findings
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#66736B]">Warnings:</span>
-                <span className="font-bold text-amber-700">1 Warning</span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-[#E8E4D9]">
-                <span className="text-[#66736B]">Evidence Fulfillment:</span>
-                <span className="font-mono font-bold text-[#2E7D5B]">{readiness.evidence}</span>
-              </div>
-            </div>
-
-            <Button
-              size="sm"
-              className="w-full font-bold"
-              variant={isReady ? 'primary' : 'secondary'}
-              icon={<Cpu className="w-4 h-4" />}
-              onClick={() => navigate('/compiler')}
+          {/* Clickable Active Context Widget */}
+          <div className="p-3.5 bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg text-xs space-y-1 text-left shrink-0 min-w-[210px]">
+            <button
+              onClick={() => navigate(isEthics ? '/compiler' : isCRA ? '/sites' : '/changesets')}
+              className="w-full text-left group cursor-pointer"
+              title="Click to open active workspace"
             >
-              {isReady ? 'VIEW CERTIFIED PACKAGE' : 'LAUNCH COMPILER GATE'}
-            </Button>
-          </Card>
-
-          {/* 5. SYSTEM STATUS */}
-          <Card className="p-6 bg-white border border-[#E8E4D9] shadow-sm space-y-3 rounded-2xl">
-            <div className="border-b border-[#E8E4D9] pb-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-[#26352D] font-mono flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-[#2E7D5B]" />
-                SYSTEM STATUS
-              </h3>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">EDC / REDCap</span>
-                <Badge variant="success" size="sm" dot>CONNECTED</Badge>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#5C6B62] uppercase tracking-wider block">
+                  {isEthics ? 'Review Target' : isCRA ? 'Monitoring Focus' : 'Active Amendment'}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-[#5C6B62] group-hover:text-[#1E4D38] group-hover:translate-x-0.5 transition-all" />
               </div>
+              <p className="font-bold text-[#1E2922] group-hover:text-[#1E4D38] transition-colors">
+                {activeCS?.title || activeCS?.type || 'Visit 4 Schedule Change'}
+              </p>
+              <span className="text-[10px] font-mono text-[#5C6B62]">
+                {activeCS?.id || 'CS-0001'}
+              </span>
+            </button>
 
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">HIS Clinical Data</span>
-                <Badge variant="success" size="sm" dot>CONNECTED</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">FHIR Bridge</span>
-                <Badge variant="info" size="sm">READY</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">ABDM Health ID</span>
-                <Badge variant="info" size="sm">READY</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">CTRI Registry</span>
-                <Badge variant="warning" size="sm">REVIEW REQUIRED</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-                <span className="font-medium text-[#26352D]">Pharmacovigilance (PvPI)</span>
-                <Badge variant="success" size="sm" dot>CONNECTED</Badge>
-              </div>
-            </div>
-          </Card>
+            {/* Clickable Readiness Gate Trigger */}
+            <button
+              onClick={() => setIsReadinessModalOpen(true)}
+              className="flex items-center gap-1.5 pt-1 hover:underline cursor-pointer"
+              title="Click to view readiness gate details"
+            >
+              <span
+                className={`inline-block w-2 h-2 rounded-full ${
+                  isCertifiedReady
+                    ? 'bg-[#1E4D38]'
+                    : allGovernanceChecksCompleted
+                    ? 'bg-[#5E826F]'
+                    : isCsDraft
+                    ? 'bg-amber-500'
+                    : 'bg-amber-600'
+                }`}
+              />
+              <span
+                className={`text-xs font-semibold ${
+                  isCertifiedReady
+                    ? 'text-[#1E4D38]'
+                    : allGovernanceChecksCompleted
+                    ? 'text-[#1E4D38]'
+                    : 'text-amber-800'
+                }`}
+              >
+                {readinessDisplayTag}
+              </span>
+            </button>
+          </div>
         </div>
+      </section>
+
+      {/* 2. NEXT ACTION & 3. WORKSPACE PROGRESS */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E5DC] pb-5">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono">
+              Next Action
+            </span>
+            <p className="text-sm font-semibold text-[#1E2922]">
+              {nextActionDesc}
+            </p>
+          </div>
+
+          {/* Dynamic Next Action CTA */}
+          <button
+            onClick={() => navigate(nextActionRoute)}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <span>{nextActionLabel}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Interactive Progress Stepper */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono">
+              {isEthics ? 'Ethics Review Progression' : isCRA ? 'Site Readiness Stages' : 'Amendment Progress'}
+            </span>
+            <span className="text-[11px] text-[#5C6B62]">Click any step to view details</span>
+          </div>
+
+          <div className={`grid grid-cols-2 sm:grid-cols-${activeSteps.length} gap-2 pt-1`}>
+            {activeSteps.map((step, idx) => (
+              <button
+                key={step.name}
+                onClick={() => handleStepClick(step)}
+                className={`p-3 rounded-lg border text-center transition-all hover:scale-[1.02] cursor-pointer text-left ${
+                  step.isCurrent
+                    ? 'bg-[#FAF9F4] border-[#1E4D38] ring-1 ring-[#1E4D38]'
+                    : step.isCompleted
+                    ? 'bg-[#EAF4EF] border-[#C5DFD2] text-[#1E4D38]'
+                    : 'bg-[#FAF9F4] border-[#E8E5DC] text-[#8C9B91] hover:border-[#B8B3A6]'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  {step.isCompleted ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#1E4D38]" />
+                  ) : step.isCurrent ? (
+                    <span className="w-2 h-2 rounded-full bg-[#1E4D38]" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-[#8C9B91]/40" />
+                  )}
+                  <span className="text-[10px] font-mono font-bold">0{idx + 1}</span>
+                </div>
+                <span className="text-xs font-semibold block text-center">{step.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 4. WHAT NEEDS YOUR ATTENTION (Persona Tasks) */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-[#E8E5DC] pb-3">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#1E2922] font-mono">
+              {isEthics
+                ? 'Reviews Awaiting Decision'
+                : isCRA
+                ? 'Operational Monitoring Tasks'
+                : 'What Needs Your Attention'}
+            </h2>
+            <p className="text-xs text-[#5C6B62] mt-0.5">
+              {isEthics
+                ? 'Regulatory submissions requiring Institutional Ethics Committee vote or sign-off'
+                : isCRA
+                ? 'Clinical research center operational briefing and training verifications'
+                : 'Action items required for regulatory certification'}
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-[#5C6B62]">
+            {isReady ? '0 pending items' : `${blockingCount} pending items`}
+          </span>
+        </div>
+
+        <div className="divide-y divide-[#E8E5DC]">
+          {isEthics ? (
+            <>
+              {/* Ethics Task 1: IEC Notification Dossier */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">IEC notification dossier (EVD-01)</span>
+                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Review Pending
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    ChangeSet CS-0001 schedule modification requires formal IEC expedited acknowledgment.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/compiler')}
+                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  Review evidence
+                </button>
+              </div>
+
+              {/* Ethics Task 2: Consent Addendum */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">Informed Consent Addendum v1.1 (EVD-02)</span>
+                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Review Pending
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Patient Information Sheet addendum for 47 active participants under ICMR 2017.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/compiler')}
+                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  Review evidence
+                </button>
+              </div>
+
+              {/* Ethics Task 3: Amendment Context */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">Protocol Amendment CS-0001 (Visit 4 Window)</span>
+                    <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                      Day 25–31 → Day 25–35
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Inspect before/after protocol parameters and clinical safety rationale.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/changesets')}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+                >
+                  Inspect amendment
+                </button>
+              </div>
+            </>
+          ) : isCRA ? (
+            <>
+              {/* CRA Task 1: Site Retraining Verification */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">Site CRC Retraining Logs (EVD-03)</span>
+                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Sign-off Required
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Multi-center training sign-offs across AIIA Delhi, NIA Jaipur, and IPGT Jamnagar.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/compiler')}
+                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  Verify training
+                </button>
+              </div>
+
+              {/* CRA Task 2: Study Sites Monitoring */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">3 Investigational Sites Approaching Visit 4</span>
+                    <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                      47 Active Subjects
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Review patient visit calendar synchronization and coordinator contacts.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/sites')}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+                >
+                  View sites
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* PI Task 1: IEC Notification */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">IEC notification dossier</span>
+                    {isReady ? (
+                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                        Approved
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Required before clinical implementation under NDCT 2019 Rule 26
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/compiler')}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+                >
+                  {isReady ? 'View record' : 'Review & Upload'}
+                </button>
+              </div>
+
+              {/* PI Task 2: Site Retraining */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">Site retraining records</span>
+                    {isReady ? (
+                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                        3 of 3 completed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        2 of 3 completed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    CRC visit-window operational briefing sign-offs across centers
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/sites')}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+                >
+                  View sites
+                </button>
+              </div>
+
+              {/* PI Task 3: Updated Consent */}
+              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">Updated informed consent (ICF Addendum)</span>
+                    {isReady ? (
+                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Awaiting verification
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">
+                    Patient Information Sheet v1.1 addendum for active enrolled participants
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/compiler')}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+                >
+                  View evidence
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* 5. IMPACT SUMMARY & 6. RECENT ACTIVITY GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* IMPACT SUMMARY */}
+        <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 shadow-xs flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono">
+              {isEthics ? 'Ethics Impact Scope' : isCRA ? 'Site Operational Scope' : 'Impact Summary'}
+            </span>
+            <p className="text-base font-bold text-[#1E2922]">
+              {readiness.sites} sites · {readiness.participants} participants · 1 visit · 1 CRF
+            </p>
+            <p className="text-xs text-[#5C6B62] leading-relaxed">
+              {isEthics
+                ? 'Amendment affects Visit 4 window across 47 participants requiring ethics notification and consent addendum.'
+                : isCRA
+                ? 'Visit tolerance bounds updated across 3 investigational centers requiring CRC re-briefing.'
+                : 'This amendment affects visit windows and assessment schedules for ongoing participant cohorts.'}
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={() => navigate('/impact')}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1E4D38] hover:text-[#163B2B] hover:underline cursor-pointer"
+            >
+              <span>View detailed impact</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </section>
+
+        {/* RECENT CLINICAL ACTIVITY */}
+        <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 shadow-xs flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#E8E5DC] pb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono">
+                {isEthics ? 'Recent Governance Decisions' : isCRA ? 'Recent Site Activity' : 'Recent Activity'}
+              </span>
+              <Clock className="w-3.5 h-3.5 text-[#5C6B62]" />
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              {auditEvents.length > 0 ? (
+                auditEvents.map((act) => (
+                  <button
+                    key={act.id}
+                    onClick={() => navigate('/changesets')}
+                    className="w-full text-left space-y-0.5 hover:bg-[#FAF9F4] p-1.5 -mx-1.5 rounded-lg transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-[#1E2922] group-hover:text-[#1E4D38] truncate transition-colors">
+                        {act.title}
+                      </span>
+                      <span className="text-[10px] text-[#8C9B91] shrink-0 font-medium font-mono">
+                        {act.timestamp}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#5C6B62] leading-tight truncate">
+                      {act.description || act.why || act.what}
+                    </p>
+                  </button>
+                ))
+              ) : (
+                <div className="py-4 text-center text-xs text-[#5C6B62]">
+                  No recent audit activity recorded yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-[#E8E5DC]">
+            <button
+              onClick={() => navigate('/changesets')}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1E4D38] hover:text-[#163B2B] hover:underline cursor-pointer"
+            >
+              <span>View full timeline</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </section>
       </div>
+
+      {/* READINESS DETAILS DRAWER/MODAL */}
+      <ReadinessDetailsModal
+        isOpen={isReadinessModalOpen}
+        onClose={() => setIsReadinessModalOpen(false)}
+        readiness={readiness}
+        evidenceList={evidenceList}
+        findings={findings}
+      />
     </div>
   );
 };

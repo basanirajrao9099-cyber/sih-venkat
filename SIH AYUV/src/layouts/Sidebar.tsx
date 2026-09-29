@@ -23,6 +23,8 @@ import {
 import { cn } from '../utils/cn';
 import { RoleSwitcher } from '../components/navigation/RoleSwitcher';
 
+import { useAuth } from '../hooks/useAuth';
+
 interface SidebarProps {
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
@@ -48,42 +50,81 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen,
   setMobileOpen,
 }) => {
-  const navGroups: NavGroup[] = [
-    {
-      title: 'TRIAL OPERATIONS',
-      items: [
-        { label: 'Dashboard', to: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-        { label: 'SIH Demo Mode', to: '/demo', icon: <Sparkles className="w-4 h-4 text-[#2E7D5B]" />, badge: 'LIVE' },
-        { label: 'Clinical Trials', to: '/trials', icon: <FlaskConical className="w-4 h-4" />, badge: '1' },
-        { label: 'Trial Sites', to: '/sites', icon: <Building2 className="w-4 h-4" />, badge: '3' },
-      ],
-    },
-    {
-      title: 'SUBJECTS & PROTOCOL',
-      items: [
-        { label: 'Participants', to: '/participants', icon: <Users className="w-4 h-4" />, badge: '47' },
-        { label: 'Recruitment', to: '/recruitment', icon: <UserPlus className="w-4 h-4" /> },
-        { label: 'Protocol & SoA', to: '/protocol', icon: <FileText className="w-4 h-4" /> },
-        { label: 'Changesets', to: '/changesets', icon: <GitPullRequest className="w-4 h-4" />, badge: 'v1.1' },
-      ],
-    },
-    {
-      title: 'IMPACT & GOVERNANCE',
-      items: [
-        { label: 'Impact Analysis', to: '/impact', icon: <TrendingUp className="w-4 h-4" /> },
-        { label: 'Safety & PV', to: '/safety', icon: <ShieldAlert className="w-4 h-4" />, badge: '1 SAE' },
-        { label: 'Ethics (IEC)', to: '/ethics', icon: <Award className="w-4 h-4" /> },
-        { label: 'Regulatory', to: '/regulatory', icon: <Scale className="w-4 h-4" /> },
-      ],
-    },
-    {
-      title: 'FABRIC SYSTEM',
-      items: [
-        { label: 'Integrations', to: '/integrations', icon: <Boxes className="w-4 h-4" /> },
-        { label: 'Protocol Compiler', to: '/compiler', icon: <Cpu className="w-4 h-4" />, badge: 'Rule Valid' },
-      ],
-    },
-  ];
+  const { currentUser } = useAuth();
+  const role = currentUser.role;
+
+  let navGroups: NavGroup[] = [];
+
+  if (role === 'Ethics Reviewer') {
+    navGroups = [
+      {
+        title: 'ETHICS REVIEW',
+        items: [
+          { label: 'Review Queue', to: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+          { label: 'Evidence Review', to: '/compiler', icon: <FileText className="w-4 h-4" />, badge: 'Pending' },
+          { label: 'Ethics Clearance', to: '/ethics', icon: <Award className="w-4 h-4" /> },
+          { label: 'Amendments', to: '/changesets', icon: <GitPullRequest className="w-4 h-4" /> },
+        ],
+      },
+      {
+        title: 'PROTOCOL CONTEXT',
+        items: [
+          { label: 'Impact Scope', to: '/impact', icon: <TrendingUp className="w-4 h-4" /> },
+          { label: 'Study Sites', to: '/sites', icon: <Building2 className="w-4 h-4" /> },
+          { label: 'Audit Trail', to: '/regulatory', icon: <Scale className="w-4 h-4" /> },
+        ],
+      },
+    ];
+  } else if (role === 'Monitor') {
+    navGroups = [
+      {
+        title: 'SITE MONITORING',
+        items: [
+          { label: 'Monitoring Overview', to: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+          { label: 'Sites & Retraining', to: '/sites', icon: <Building2 className="w-4 h-4" /> },
+          { label: 'Evidence Monitoring', to: '/compiler', icon: <FileText className="w-4 h-4" /> },
+          { label: 'Participants', to: '/participants', icon: <Users className="w-4 h-4" /> },
+        ],
+      },
+      {
+        title: 'GOVERNANCE & AUDIT',
+        items: [
+          { label: 'Amendments', to: '/changesets', icon: <GitPullRequest className="w-4 h-4" /> },
+          { label: 'Impact Scope', to: '/impact', icon: <TrendingUp className="w-4 h-4" /> },
+          { label: 'Audit Trail', to: '/regulatory', icon: <Scale className="w-4 h-4" /> },
+        ],
+      },
+    ];
+  } else {
+    // Default PI & Coordinator & Admin
+    navGroups = [
+      {
+        title: 'STUDY',
+        items: [
+          { label: 'Overview', to: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+          { label: 'Amendments', to: '/changesets', icon: <GitPullRequest className="w-4 h-4" />, badge: 'Active' },
+          { label: 'Sites', to: '/sites', icon: <Building2 className="w-4 h-4" /> },
+          { label: 'Participants', to: '/participants', icon: <Users className="w-4 h-4" /> },
+        ],
+      },
+      {
+        title: 'GOVERNANCE',
+        items: [
+          { label: 'Impact', to: '/impact', icon: <TrendingUp className="w-4 h-4" /> },
+          { label: 'Evidence', to: '/compiler', icon: <FileText className="w-4 h-4" /> },
+          { label: 'Ethics & Compliance', to: '/ethics', icon: <Award className="w-4 h-4" /> },
+        ],
+      },
+      {
+        title: 'ADMINISTRATION',
+        items: [
+          { label: 'Integrations', to: '/integrations', icon: <Boxes className="w-4 h-4" /> },
+          { label: 'Audit Trail', to: '/regulatory', icon: <Scale className="w-4 h-4" /> },
+          { label: 'Protocol Catalog', to: '/trials', icon: <FlaskConical className="w-4 h-4" /> },
+        ],
+      },
+    ];
+  }
 
   return (
     <>

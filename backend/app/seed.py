@@ -15,6 +15,7 @@ from app.models.governance import (
 )
 from app.models.audit import AuditTrailRecord
 from app.auth.security import hash_password
+from app.services.ctri_ingestion import ingest_ctri_dataset
 
 logger = logging.getLogger("ayu_trial_fabric.seed")
 logging.basicConfig(level=logging.INFO)
@@ -141,7 +142,24 @@ def seed_database():
                 start_date="2025-11-15",
                 estimated_end_date="2026-12-30",
                 sponsor="Central Council for Research in Ayurvedic Sciences (CCRAS)",
-                ctri_number="CTRI/2025/11/059341",
+                ctri_number="CTRI/2020/06/025557",
+                scientific_title="A randomized open label multicentric clinical trial to evaluate the safety and efficacy of AYUSH 64 in mild to moderate COVID-19",
+                study_type="Interventional",
+                study_design="Randomized, Parallel Group, Active Controlled, Multicentric",
+                health_condition="SARS-CoV-2 infection (Mild and Moderate COVID-19)",
+                intervention="AYUSH-64 (Polyherbal formulation, 500mg tablets, 2 tabs thrice daily)",
+                comparator="Standard of Care (SOC) according to ICMR/National Guidelines",
+                primary_sponsor="Central Council for Research in Ayurvedic Sciences (CCRAS), Ministry of AYUSH",
+                secondary_sponsor="Council of Scientific and Industrial Research (CSIR)",
+                recruitment_status="Completed",
+                first_enrollment_date="2020-06-08",
+                study_duration="12 Months",
+                target_sample_size=140,
+                final_enrollment=140,
+                country="India",
+                source_registry="CTRI",
+                source_url="https://ctri.nic.in/Clinicaltrials/pmaindet2.php?trialid=CTRI/2020/06/025557",
+                source_fetched_at="2026-09-27T00:00:00Z",
                 pi_name="Prof. Dr. Anandita Sharma",
                 lead_investigator="Dr. V. Sharma, MD (Ayu), PhD",
                 active_amendment="CS-0001",
@@ -152,7 +170,7 @@ def seed_database():
             )
             db.add(trial_record)
 
-        # 3. Seed 3 Participating Sites
+        # 3. Seed 3 Participating Sites for AYU-2026-0001
         sites_data = [
             {
                 "id": "site-01",
@@ -160,13 +178,20 @@ def seed_database():
                 "site_id": "SITE-001",
                 "site_code": "SITE-01-AIIA",
                 "name": "All India Institute of Ayurveda — Center for Integrative Medicine",
-                "site_name": "All India Institute of Ayurveda (SITE-001)",
+                "site_name": "All India Institute of Ayurveda — Center for Integrative Medicine",
+                "address": "Gautampuri, Sarita Vihar, Mathura Road, New Delhi 110076",
                 "city": "New Delhi",
                 "state": "Delhi",
+                "country": "India",
                 "location": "New Delhi, Delhi",
                 "pi_name": "Prof. Dr. Anandita Sharma",
                 "investigator": "Dr. V. Sharma",
                 "contact_email": "aiia.trials@gov.in",
+                "ethics_committee": "Institutional Ethics Committee, All India Institute of Ayurveda",
+                "ethics_approval_status": "Approved - IEC/AIIA/2020/042",
+                "source_registry": "CTRI",
+                "source_url": "https://ctri.nic.in/Clinicaltrials/pmaindet2.php?trialid=CTRI/2020/06/025557",
+                "source_fetched_at": "2026-09-27T00:00:00Z",
                 "status": "active",
                 "activation_status": "ACTIVE",
                 "governance_status": "READY",
@@ -186,13 +211,20 @@ def seed_database():
                 "site_id": "SITE-002",
                 "site_code": "SITE-02-NIAJ",
                 "name": "National Institute of Ayurveda — Dept of Kayachikitsa",
-                "site_name": "National Institute of Ayurveda (SITE-002)",
+                "site_name": "National Institute of Ayurveda — Dept of Kayachikitsa",
+                "address": "Madhav Vilas Palace, Amer Road, Jaipur, Rajasthan 302002",
                 "city": "Jaipur",
                 "state": "Rajasthan",
+                "country": "India",
                 "location": "Jaipur, Rajasthan",
                 "pi_name": "Prof. Sanjeev Sharma",
                 "investigator": "Prof. Sanjeev Sharma",
                 "contact_email": "nia.research@nia.nic.in",
+                "ethics_committee": "Institutional Ethics Committee, National Institute of Ayurveda",
+                "ethics_approval_status": "Approved - IEC/NIA/2020/019",
+                "source_registry": "CTRI",
+                "source_url": "https://ctri.nic.in/Clinicaltrials/pmaindet2.php?trialid=CTRI/2020/06/025557",
+                "source_fetched_at": "2026-09-27T00:00:00Z",
                 "status": "recruiting",
                 "activation_status": "ACTIVE",
                 "governance_status": "READY",
@@ -212,13 +244,20 @@ def seed_database():
                 "site_id": "SITE-003",
                 "site_code": "SITE-03-IPGT",
                 "name": "ITRA Institute of Teaching & Research in Ayurveda",
-                "site_name": "ITRA Jamnagar Center (SITE-003)",
+                "site_name": "ITRA Institute of Teaching & Research in Ayurveda",
+                "address": "Opposite B-Division Police Station, Gurudwara Road, Jamnagar, Gujarat 361008",
                 "city": "Jamnagar",
                 "state": "Gujarat",
+                "country": "India",
                 "location": "Jamnagar, Gujarat",
                 "pi_name": "Dr. Anup Thakar",
                 "investigator": "Dr. Anup Thakar",
                 "contact_email": "itra.trials@ayush.edu.in",
+                "ethics_committee": "Institutional Ethics Committee, ITRA Jamnagar",
+                "ethics_approval_status": "Approved - IEC/ITRA/2020/033",
+                "source_registry": "CTRI",
+                "source_url": "https://ctri.nic.in/Clinicaltrials/pmaindet2.php?trialid=CTRI/2020/06/025557",
+                "source_fetched_at": "2026-09-27T00:00:00Z",
                 "status": "active",
                 "activation_status": "ACTIVE",
                 "governance_status": "READY",
@@ -238,6 +277,10 @@ def seed_database():
             existing = db.query(Site).filter(Site.site_id == s_data["site_id"]).first()
             if not existing:
                 db.add(Site(**s_data))
+
+        # Ingest remaining 10 CTRI records into database
+        ingest_ctri_dataset(db)
+        db.flush()
 
         # 4. Seed Exactly 47 Synthetic Participants (Site 1: 18, Site 2: 15, Site 3: 14)
         prakritis = ["Vata-Pitta", "Pitta-Kapha", "Vata-Kapha", "Tridosha", "Kapha-Vata"]

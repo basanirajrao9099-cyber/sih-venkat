@@ -39,7 +39,59 @@ def get_engine():
             connect_args={"check_same_thread": False}
         )
 
+def ensure_sqlite_schema(engine_instance):
+    """Safely ensure new CTRI columns exist in SQLite tables if running SQLite."""
+    try:
+        if "sqlite" in str(engine_instance.url):
+            from sqlalchemy import inspect, text
+            inspector = inspect(engine_instance)
+            tables = inspector.get_table_names()
+            with engine_instance.connect() as conn:
+                if "trials" in tables:
+                    cols = [c["name"] for c in inspector.get_columns("trials")]
+                    trial_new = [
+                        ("scientific_title", "VARCHAR"),
+                        ("study_type", "VARCHAR"),
+                        ("study_design", "VARCHAR"),
+                        ("health_condition", "VARCHAR"),
+                        ("intervention", "VARCHAR"),
+                        ("comparator", "VARCHAR"),
+                        ("primary_sponsor", "VARCHAR"),
+                        ("secondary_sponsor", "VARCHAR"),
+                        ("recruitment_status", "VARCHAR"),
+                        ("first_enrollment_date", "VARCHAR"),
+                        ("study_duration", "VARCHAR"),
+                        ("target_sample_size", "INTEGER"),
+                        ("final_enrollment", "INTEGER"),
+                        ("country", "VARCHAR"),
+                        ("source_registry", "VARCHAR"),
+                        ("source_url", "VARCHAR"),
+                        ("source_fetched_at", "VARCHAR"),
+                    ]
+                    for name, col_type in trial_new:
+                        if name not in cols:
+                            conn.execute(text(f"ALTER TABLE trials ADD COLUMN {name} {col_type}"))
+                if "sites" in tables:
+                    cols = [c["name"] for c in inspector.get_columns("sites")]
+                    site_new = [
+                        ("address", "VARCHAR"),
+                        ("country", "VARCHAR"),
+                        ("ethics_committee", "VARCHAR"),
+                        ("ethics_approval_status", "VARCHAR"),
+                        ("recruitment_status", "VARCHAR"),
+                        ("source_registry", "VARCHAR"),
+                        ("source_url", "VARCHAR"),
+                        ("source_fetched_at", "VARCHAR"),
+                    ]
+                    for name, col_type in site_new:
+                        if name not in cols:
+                            conn.execute(text(f"ALTER TABLE sites ADD COLUMN {name} {col_type}"))
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"Schema check notice: {e}")
+
 engine = get_engine()
+ensure_sqlite_schema(engine)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():

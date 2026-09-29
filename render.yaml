@@ -1,0 +1,47 @@
+services:
+  # Backend FastAPI API Gateway
+  - type: web
+    name: ayu-trial-fabric-api
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ayu-trial-fabric-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 1440
+      - key: ENVIRONMENT
+        value: production
+
+  # Frontend React SPA
+  - type: web
+    name: ayu-trial-fabric-ui
+    env: static
+    rootDir: "SIH AYUV"
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: ayu-trial-fabric-api
+          property: host
+
+databases:
+  - name: ayu-trial-fabric-db
+    plan: free
+    databaseName: ayu_trial_fabric
+    user: ayu_user

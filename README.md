@@ -198,3 +198,17 @@ To maintain technical honesty and regulatory rigor per SIH PRD Section 48, the f
 
 ### Q5: "What happens if 20 investigators trigger recompile at the exact same second?"
 > **Answer**: The compiler pipeline utilizes a concurrency lock and database-level row locks (`with_for_update`) on an atomic counter table `CompilationRunCounter`. In our load tests ([test_load_recompile.py](file:///c:/Users/garip/Downloads/SIH%20AYUV/backend/tests/test_load_recompile.py)), 20 simultaneous threads triggered compilation with zero HTTP 500s, atomic IDs (`CMP-000128` through `CMP-000147`), and an average latency of ~90ms.
+
+---
+
+## 8. Live CTRI Integration (Read-Only)
+
+Ayu-Trial Fabric includes a dedicated public **Clinical Trials Registry - India (CTRI)** connector (`app.integrations.ctri`).
+
+### Key Capabilities & Safeguards:
+1. **Public Read-Only Retrieval**: Retrieves and normalizes public trial registration records directly from official CTRI registry pages.
+2. **Zero Write-Back Safety**: The connector operates strictly in read-only mode (`GET /api/v1/ctri/fetch`). It contains **NO** write, mutation, or update operations targeting CTRI or government databases.
+3. **Strict SSRF Defenses**: Network requests are strictly constrained to `ctri.nic.in` with explicit connection timeouts (5s) and read timeouts (10s). Arbitrary user URLs are rejected.
+4. **Deterministic Change Detection & Hashing**: Computes SHA-256 provenance hashes over canonical trial records to detect version changes between subsequent fetches.
+5. **Cryptographic Merkle Audit Logging**: Every fetch, change detection, or error event is logged as an immutable entry in the SHA-256 Merkle audit trail.
+

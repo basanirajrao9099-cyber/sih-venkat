@@ -6,6 +6,9 @@ from app.schemas.trial import (
     ProtocolEndpointSchema,
     ScheduleOfAssessmentSchema,
     FullTrialDetailSchema,
+    SiteTrainingRecordSchema,
+    SiteTrainingCompleteRequest,
+    SiteTrainingVerifyRequest,
 )
 from app.schemas.participant import ParticipantOpsItemSchema, TimelineStepSchema
 from app.schemas.governance import (
@@ -13,6 +16,7 @@ from app.schemas.governance import (
     FindingSchema,
     ObligationSchema,
     EvidenceItemSchema,
+    ReadinessDimensionSchema,
     ReadinessSummarySchema,
     CompilationRunDataSchema,
     CompilationRunRequest,
@@ -36,6 +40,9 @@ __all__ = [
     "ProtocolEndpointSchema",
     "ScheduleOfAssessmentSchema",
     "FullTrialDetailSchema",
+    "SiteTrainingRecordSchema",
+    "SiteTrainingCompleteRequest",
+    "SiteTrainingVerifyRequest",
     "ParticipantOpsItemSchema",
     "TimelineStepSchema",
     "ChangeSetRecordSchema",

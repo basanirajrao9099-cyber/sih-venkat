@@ -3,6 +3,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
+import app.models.user
+import app.models.trial
+import app.models.protocol
+import app.models.participant
+import app.models.governance
+import app.models.audit
 from app.main import app
 from app.seed import seed_database
 

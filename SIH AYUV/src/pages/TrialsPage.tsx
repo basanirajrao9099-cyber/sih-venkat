@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, FlaskConical, Eye, Building2, Users, FileText, TrendingUp, Cpu } from 'lucide-react';
+import { Plus, Search, Filter, FlaskConical, Eye, Building2, Users, FileText, TrendingUp, Cpu, ExternalLink } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -39,14 +39,30 @@ export const TrialsPage: React.FC = () => {
               status: (t.status || 'ACTIVE').toUpperCase(),
               protocolVersion: t.protocolVersion || 'v1.0',
               numberOfSites: t.numberOfSites || t.activeSites || 3,
+              siteCount: t.numberOfSites || t.activeSites || 3,
               numberOfParticipants: t.numberOfParticipants || t.enrolledCount || 47,
+              participantCount: t.numberOfParticipants || t.enrolledCount || 47,
+              targetParticipants: t.targetEnrollment || 360,
               recruitmentPercentage: t.recruitmentPercentage || 72,
+              recruitmentPct: t.recruitmentPercentage || 72,
               leadInvestigator: t.leadInvestigator || t.piName,
               activeAmendment: t.activeAmendment,
-              indication: t.indication,
-              sponsor: t.sponsor,
-              startDate: t.startDate,
+              indication: t.indication || t.healthCondition,
+              sponsor: t.sponsor || t.primarySponsor,
+              startDate: t.startDate || t.firstEnrollmentDate,
               description: t.description,
+              ctriNumber: t.ctriNumber,
+              scientificTitle: t.scientificTitle,
+              studyType: t.studyType,
+              studyDesign: t.studyDesign,
+              healthCondition: t.healthCondition,
+              intervention: t.intervention,
+              comparator: t.comparator,
+              primarySponsor: t.primarySponsor,
+              secondarySponsor: t.secondarySponsor,
+              sourceRegistry: t.sourceRegistry || 'CTRI',
+              sourceUrl: t.sourceUrl,
+              sourceFetchedAt: t.sourceFetchedAt,
             }));
             setTrials(mapped);
           }
@@ -342,6 +358,51 @@ export const TrialsPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* CTRI Registry Provenance */}
+            {selectedTrial.ctriNumber && (
+              <div className="p-3.5 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9] space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[11px] font-bold tracking-wider uppercase text-[#66736B]">
+                    Public CTRI Registry Record
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[#2E7D5B] font-medium bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#7FAF91]/30">
+                    Source: Clinical Trials Registry–India (CTRI)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                  <div>
+                    <span className="text-[#66736B] block text-[11px]">CTRI Registration</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="font-mono font-bold text-[#26352D]">{selectedTrial.ctriNumber}</span>
+                      {selectedTrial.sourceUrl && (
+                        <a
+                          href={selectedTrial.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 text-[10px] text-[#2E7D5B] hover:underline font-semibold"
+                        >
+                          View CTRI record
+                          <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  {selectedTrial.studyDesign && (
+                    <div>
+                      <span className="text-[#66736B] block text-[11px]">Study Design</span>
+                      <p className="text-[#26352D] font-medium mt-0.5">{selectedTrial.studyDesign}</p>
+                    </div>
+                  )}
+                  {selectedTrial.intervention && (
+                    <div className="sm:col-span-2">
+                      <span className="text-[#66736B] block text-[11px]">Intervention</span>
+                      <p className="text-[#26352D] font-medium mt-0.5">{selectedTrial.intervention}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1">
               <span className="text-[#66736B] font-medium">Study Indication</span>

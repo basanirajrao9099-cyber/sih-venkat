@@ -22,10 +22,19 @@ export async function apiFetch<T>(
   fallbackData?: T
 ): Promise<T> {
   try {
-    const res = await fetch(endpoint, {
+    const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+    const fullUrl = endpoint.startsWith('http') ? endpoint : `${apiBaseUrl}${endpoint}`;
+
+    const activeRole =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('ayu_trial_user_role') || 'Principal Investigator'
+        : 'Principal Investigator';
+
+    const res = await fetch(fullUrl, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        'X-User-Role': activeRole,
         ...(options?.headers || {}),
       },
     });

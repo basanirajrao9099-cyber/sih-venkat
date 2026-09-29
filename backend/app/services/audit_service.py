@@ -25,10 +25,16 @@ ACTION_TEMPLATES: Dict[str, str] = {
     "EVIDENCE_SUBMITTED": "Submitted regulatory or operational evidence dossier with verified provenance and checksum.",
     "EVIDENCE_VERIFIED": "Reviewed and verified evidence artifact against protocol acceptance criteria and statutory guidelines.",
     "EVIDENCE_REJECTED": "Rejected evidence submission due to missing compliance requirements or defective provenance.",
+    "SITE_TRAINING_COMPLETED": "Site clinical staff completed mandatory protocol amendment training and comprehension assessment.",
+    "SITE_TRAINING_VERIFIED": "Clinical Monitor (CRA) verified site training documentation and compliance logs.",
     "RECOMPILATION_PASSED": "Re-evaluated all governance pipeline checkpoints. Zero blocking findings detected; all rule constraints satisfied.",
     "RECOMPILATION_FAILED": "Re-evaluated governance pipeline; unfulfilled blocking constraints persist.",
     "READINESS_CERTIFIED": "ChangeSet certified for immediate, synchronized operational rollout across all active study centers.",
     "AI_ADVISORY_QUERY": "AI Advisory consultation requested for clinical trial interpretation. Advisory output generated without state mutation.",
+    "CTRI_TRIAL_FETCHED": "Retrieved live public trial registry record from CTRI; verified source provenance and normalized schema.",
+    "CTRI_TRIAL_FETCH_FAILED": "Attempted live retrieval from CTRI; encountered network timeout, malformed payload, or invalid registration ID.",
+    "CTRI_TRIAL_UNCHANGED": "Compared latest CTRI registry record with existing snapshot; zero field modifications detected.",
+    "CTRI_TRIAL_UPDATED": "Detected statutory protocol or operational modifications in live CTRI trial record; generated version diff.",
 }
 
 

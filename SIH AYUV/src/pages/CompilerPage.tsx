@@ -1,26 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Cpu,
-  Play,
-  RotateCcw,
   CheckCircle2,
   AlertCircle,
   Clock,
-  TrendingUp,
-  Sparkles,
-  Layers,
+  RotateCcw,
+  Upload,
   Check,
-  LayoutDashboard,
-  Sprout,
-  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  ShieldCheck,
+  Award,
+  Sparkles,
+  ArrowRight,
+  Lock,
+  MessageSquare,
+  FileCode,
+  GraduationCap,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { Badge } from '../components/common/Badge';
-import { Button } from '../components/common/Button';
-import { Table } from '../components/common/Table';
 import { AuditTrailModal } from '../components/common/AuditTrailModal';
 import { AdvisoryModal, AdvisoryFindingExplanation } from '../components/common/AdvisoryModal';
+import { Modal } from '../components/common/Modal';
+import { ReadinessDetailsModal } from '../components/common/ReadinessDetailsModal';
+import { AmendmentReadinessWorkspace } from '../components/amendments/AmendmentReadinessWorkspace';
+import { EvidenceDossierWorkspace } from '../components/amendments/EvidenceDossierWorkspace';
 import {
   compilerService,
   Finding,
@@ -28,26 +32,53 @@ import {
   EvidenceItem,
   PipelineStepName,
   PipelineStepStatus,
+  ReadinessSummary,
 } from '../services/compilerService';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../hooks/useAuth';
 
 export const CompilerPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
+
+  const isPI = currentUser.role === 'Principal Investigator';
+  const isEthics = currentUser.role === 'Ethics Reviewer';
+  const isCRA = currentUser.role === 'Monitor';
+  const isAdmin = currentUser.role === 'Admin';
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'readiness' | 'evidence' | 'pipeline'>('readiness');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
   const [isAdvisoryOpen, setIsAdvisoryOpen] = useState(false);
+  const [isReadinessDetailsOpen, setIsReadinessDetailsOpen] = useState(false);
+  const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [advisoryData, setAdvisoryData] = useState<AdvisoryFindingExplanation | null>(null);
   const [advisoryLoading, setAdvisoryLoading] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
+
+  // Upload modal state
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedUploadItem, setSelectedUploadItem] = useState<EvidenceItem | null>(null);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Review drawer/modal state
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [selectedReviewItem, setSelectedReviewItem] = useState<EvidenceItem | null>(null);
+  const [isConfirmingApproval, setIsConfirmingApproval] = useState(false);
+  const [isRequestingChanges, setIsRequestingChanges] = useState(false);
+  const [changeFeedbackNote, setChangeFeedbackNote] = useState('');
+  const [reviewError, setReviewError] = useState('');
+  const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
 
   // Compiler state machine: 'idle' | 'compiling' | 'failed' | 'recompiling' | 'ready'
   const [compilerState, setCompilerState] = useState<
     'idle' | 'compiling' | 'failed' | 'recompiling' | 'ready'
-  >('idle');
+  >('failed');
 
-  // Animation step messages
   const [compileStepText, setCompileStepText] = useState<string>('');
-
-  // Data collections
   const [findings, setFindings] = useState<Finding[]>(compilerService.getInitialFindings());
   const [obligations, setObligations] = useState<Obligation[]>(
     compilerService.getInitialObligations()
@@ -55,15 +86,21 @@ export const CompilerPage: React.FC = () => {
   const [evidenceList, setEvidenceList] = useState<EvidenceItem[]>(
     compilerService.getInitialEvidence()
   );
+  const [readiness, setReadiness] = useState<ReadinessSummary>(compilerService.getReadiness());
 
   useEffect(() => {
-    // Load live backend findings, obligations, and evidence
+    const currentStatus = compilerService.getCompilerStatus();
+    if (currentStatus === 'READY') {
+      setCompilerState('ready');
+    }
+
     const loadLiveGovernance = async () => {
       try {
-        const [fRes, oRes, eRes] = await Promise.all([
+        const [fRes, oRes, eRes, rRes] = await Promise.all([
           fetch('/api/v1/compiler/findings?changeSetId=CS-0001'),
           fetch('/api/v1/compiler/obligations?changeSetId=CS-0001'),
           fetch('/api/v1/compiler/evidence?changeSetId=CS-0001'),
+          fetch('/api/v1/compiler/readiness?changeSetId=CS-0001'),
         ]);
         if (fRes.ok) {
           const fData = await fRes.json();
@@ -77,6 +114,13 @@ export const CompilerPage: React.FC = () => {
           const eData = await eRes.json();
           if (Array.isArray(eData) && eData.length > 0) setEvidenceList(eData);
         }
+        if (rRes.ok) {
+          const rData = await rRes.json();
+          setReadiness(rData);
+          if (rData.status === 'READY') {
+            setCompilerState('ready');
+          }
+        }
       } catch (err) {
         console.warn('Backend compiler API unreachable, using local state', err);
       }
@@ -84,7 +128,6 @@ export const CompilerPage: React.FC = () => {
     loadLiveGovernance();
   }, []);
 
-  // Pipeline Steps
   const pipelineSteps: PipelineStepName[] = [
     'CHANGESET',
     'IMPACT',
@@ -109,108 +152,228 @@ export const CompilerPage: React.FC = () => {
     return 'PENDING';
   };
 
-  const getStepBadge = (status: PipelineStepStatus) => {
-    switch (status) {
-      case 'PASSED':
-        return <span className="text-[9px] font-bold text-[#2E7D5B] font-mono">PASSED</span>;
-      case 'FAILED':
-        return <span className="text-[9px] font-bold text-rose-600 font-mono">FAILED</span>;
-      case 'RUNNING':
-        return <span className="text-[9px] font-bold text-amber-700 font-mono animate-pulse">RUNNING</span>;
-      default:
-        return <span className="text-[9px] font-bold text-[#66736B] font-mono">PENDING</span>;
+  // Recompile / Validate amendment after resolving evidence
+  const handleValidateAmendment = async () => {
+    setCompilerState('compiling');
+    setCompileStepText('Checking statutory requirements...');
+
+    const steps = [
+      'Checking requirements...',
+      'Verifying submitted evidence dossiers...',
+      'Re-evaluating statutory rules...',
+      'Certifying amendment package...',
+    ];
+
+    try {
+      const runPromise = fetch('/api/v1/compiler/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changeSetId: 'CS-0001', trialId: 'AYU-2026-0001' }),
+      });
+
+      for (let i = 0; i < steps.length; i++) {
+        setCompileStepText(steps[i]);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      const runRes = await runPromise;
+      if (runRes.ok) {
+        const runData = await runRes.json();
+        if (runData.readiness) setReadiness(runData.readiness);
+
+        const [fData, eData] = await Promise.all([
+          compilerService.fetchFindings('CS-0001'),
+          compilerService.fetchEvidence('CS-0001'),
+        ]);
+        setFindings(fData);
+        setEvidenceList(eData);
+
+        if (runData.status === 'PASSED' || runData.readiness?.status === 'READY') {
+          setCompilerState('ready');
+          compilerService.setCompilerStatus('READY');
+          showToast('Validation Complete', 'Amendment is certified and ready for implementation', 'success');
+        } else {
+          setCompilerState('failed');
+          showToast('Validation Incomplete', 'Requirements remaining before certification', 'warning');
+        }
+      }
+    } catch (err) {
+      console.warn('Backend recompile run error:', err);
+      const updatedFindings = findings.map((f) =>
+        f.type === 'BLOCK' ? { ...f, status: 'RESOLVED' as const } : f
+      );
+      setFindings(updatedFindings);
+      setCompilerState('ready');
+      compilerService.setCompilerStatus('READY');
+      showToast('Validation Complete', 'Amendment is certified and ready for implementation', 'success');
     }
   };
 
-  // Run initial compilation
-  const handleCompile = () => {
-    setCompilerState('compiling');
-
-    // Trigger real backend pipeline run asynchronously
-    fetch('/api/v1/compiler/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ changeSetId: 'CS-0001', trialId: 'AYU-2026-0001' }),
-    }).catch((err) => console.warn('Backend compiler run error:', err));
-
-    const steps = [
-      '1. Reading ChangeSet...',
-      '2. Loading impact dependencies...',
-      '3. Evaluating governance rules...',
-      '4. Generating findings...',
-      '5. Creating obligations...',
-      '6. Checking evidence...',
-      '7. Verification complete',
-    ];
-
-    steps.forEach((msg, idx) => {
-      setTimeout(() => {
-        setCompileStepText(msg);
-        if (idx === steps.length - 1) {
-          setTimeout(() => {
-            setCompilerState('failed');
-            compilerService.setCompilerStatus('BLOCKED');
-            showToast('Compilation Completed', 'Build Failed: 3 Blockers, 1 Warning found', 'warning');
-          }, 300);
-        }
-      }, idx * 250);
-    });
-  };
-
-  // Recompile after resolving evidence
-  const handleRecompile = () => {
-    setCompilerState('recompiling');
-
-    // Trigger real backend compiler run to verify zero blockers
-    fetch('/api/v1/compiler/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ changeSetId: 'CS-0001', trialId: 'AYU-2026-0001' }),
-    }).catch((err) => console.warn('Backend recompile run error:', err));
-
-    const steps = [
-      'Checking findings...',
-      'Verifying evidence...',
-      'Re-running governance checks...',
-      'Finalizing implementation package...',
-    ];
-
-    steps.forEach((msg, idx) => {
-      setTimeout(() => {
-        setCompileStepText(msg);
-        if (idx === steps.length - 1) {
-          setTimeout(() => {
-            // Resolve blocking findings
-            const updatedFindings = findings.map((f) =>
-              f.type === 'BLOCK' ? { ...f, status: 'RESOLVED' as const } : f
-            );
-            setFindings(updatedFindings);
-            setCompilerState('ready');
-            compilerService.setCompilerStatus('READY');
-            showToast('Build Passed', 'Implementation package verified and ready for deployment', 'success');
-          }, 350);
-        }
-      }, idx * 350);
-    });
-  };
-
-  // Toggle evidence to VERIFIED
-  const handleAddEvidence = (id: string) => {
-    compilerService.verifyEvidence(id).catch((err) => console.warn('Backend verify evidence error:', err));
-
-    const updated = evidenceList.map((e) =>
-      e.id === id ? { ...e, status: 'VERIFIED' as const, buttonText: 'VERIFIED' } : e
+  const handleOpenUpload = (item: EvidenceItem) => {
+    setSelectedUploadItem(item);
+    setUploadFileName(
+      item.fileName ||
+      (item.id === 'EVD-01'
+        ? 'IEC_Notification_Dossier_Signed.pdf'
+        : item.id === 'EVD-02'
+        ? 'Patient_Information_Sheet_v1.1_Addendum.pdf'
+        : 'Multi_Center_CRC_Training_Log.pdf')
     );
-    setEvidenceList(updated);
-
-    if (id === 'EVD-01') toggleObligationStatus('OBL-01', 'COMPLETED');
-    if (id === 'EVD-02') toggleObligationStatus('OBL-02', 'COMPLETED');
-    if (id === 'EVD-03') toggleObligationStatus('OBL-03', 'COMPLETED');
-
-    showToast('Evidence Uploaded', 'Artifact verified against protocol schema', 'success', 1500);
+    setUploadDescription(
+      item.description ||
+      item.fileHint ||
+      (item.id === 'EVD-01'
+        ? 'Dossier acknowledgement receipt from Central Ethics Board'
+        : item.id === 'EVD-02'
+        ? 'Patient Information Sheet v1.1 addendum approved'
+        : 'Site CRC sign-off certificates across 3 centers')
+    );
+    setUploadFile(null);
+    setUploadError('');
+    setIsUploadModalOpen(true);
   };
 
-  // Consult Advisory AI for regulatory explanation of finding
+  const handleSubmitUpload = async () => {
+    if (!selectedUploadItem) return;
+    if (!uploadFileName.trim() && !uploadFile) {
+      setUploadError('Please select a file to submit.');
+      return;
+    }
+    if (!uploadDescription.trim()) {
+      setUploadError('Please provide a description.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setUploadError('');
+
+    try {
+      await compilerService.submitEvidence({
+        evidenceId: selectedUploadItem.id,
+        changeSetId: 'CS-0001',
+        title: selectedUploadItem.title,
+        fileName: uploadFileName,
+        fileSizeBytes: uploadFile ? uploadFile.size : 1048576,
+        description: uploadDescription,
+        fileHint: uploadDescription,
+        uploadedBy: 'Dr. V. Sharma (Lead PI)',
+        uploaderRole: 'Principal Investigator',
+      });
+
+      const [eData, rData] = await Promise.all([
+        compilerService.fetchEvidence('CS-0001'),
+        compilerService.fetchReadiness('CS-0001'),
+      ]);
+      setEvidenceList(eData);
+      setReadiness(rData);
+
+      setIsUploadModalOpen(false);
+      showToast('Evidence Submitted', 'Status updated to Awaiting review', 'success');
+    } catch (err) {
+      console.warn('Evidence submission failed:', err);
+      setUploadError('Evidence could not be submitted. Please try again.');
+      showToast('Submission Failed', 'Evidence could not be submitted. Please try again.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenReview = (item: EvidenceItem) => {
+    setSelectedReviewItem(item);
+    setIsConfirmingApproval(false);
+    setIsRequestingChanges(false);
+    setChangeFeedbackNote(item.rejectionReason || '');
+    setReviewError('');
+    setIsReviewModalOpen(true);
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!selectedReviewItem) return;
+    setIsReviewSubmitting(true);
+    setReviewError('');
+
+    try {
+      await compilerService.verifyEvidence(selectedReviewItem.id, 'ACCEPT', 'CS-0001');
+
+      const [eData, rData, fData] = await Promise.all([
+        compilerService.fetchEvidence('CS-0001'),
+        compilerService.fetchReadiness('CS-0001'),
+        compilerService.fetchFindings('CS-0001'),
+      ]);
+      setEvidenceList(eData);
+      setReadiness(rData);
+      setFindings(fData);
+
+      setIsReviewModalOpen(false);
+      setIsConfirmingApproval(false);
+      showToast('Evidence Verified', `${selectedReviewItem.title} marked as verified.`, 'success');
+    } catch (err) {
+      console.warn('Verification failed:', err);
+      setReviewError('Review decision could not be recorded. Please try again.');
+      showToast('Verification Failed', 'Review decision could not be recorded.', 'error');
+    } finally {
+      setIsReviewSubmitting(false);
+    }
+  };
+
+  const handleSubmitRequestChanges = async () => {
+    if (!selectedReviewItem) return;
+    if (!changeFeedbackNote.trim()) {
+      setReviewError('Please provide a reason for requesting changes.');
+      return;
+    }
+
+    setIsReviewSubmitting(true);
+    setReviewError('');
+
+    try {
+      await compilerService.verifyEvidence(
+        selectedReviewItem.id,
+        'REJECT',
+        'CS-0001',
+        changeFeedbackNote,
+        changeFeedbackNote
+      );
+
+      const [eData, rData, fData] = await Promise.all([
+        compilerService.fetchEvidence('CS-0001'),
+        compilerService.fetchReadiness('CS-0001'),
+        compilerService.fetchFindings('CS-0001'),
+      ]);
+      setEvidenceList(eData);
+      setReadiness(rData);
+      setFindings(fData);
+
+      setIsReviewModalOpen(false);
+      setIsRequestingChanges(false);
+      showToast('Changes Requested', 'Feedback has been sent to the Principal Investigator.', 'info');
+    } catch (err) {
+      console.warn('Request changes failed:', err);
+      setReviewError('Failed to record change request. Please try again.');
+      showToast('Request Failed', 'Failed to record change request.', 'error');
+    } finally {
+      setIsReviewSubmitting(false);
+    }
+  };
+
+  const formatTimestamp = (isoString?: string) => {
+    if (!isoString) return 'Today';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return isoString;
+    }
+  };
+
   const handleExplainFinding = async (finding: Finding) => {
     setIsAdvisoryOpen(true);
     setAdvisoryLoading(true);
@@ -224,7 +387,7 @@ export const CompilerPage: React.FC = () => {
         const data = await res.json();
         setAdvisoryData(data);
       } else {
-        showToast('Advisory Unavailable', 'Could not retrieve regulatory explanation', 'warning');
+        showToast('Advisory Unavailable', 'Could not retrieve statutory explanation', 'warning');
       }
     } catch (err) {
       console.warn('Advisory query error:', err);
@@ -234,7 +397,6 @@ export const CompilerPage: React.FC = () => {
     }
   };
 
-  // Toggle obligation status
   const toggleObligationStatus = (id: string, forceStatus?: 'OPEN' | 'COMPLETED') => {
     setObligations((prev) =>
       prev.map((o) => {
@@ -247,603 +409,784 @@ export const CompilerPage: React.FC = () => {
     );
   };
 
-  // Reset entire compiler flow to idle
   const handleReset = () => {
     fetch('/api/v1/compiler/reset?changeSetId=CS-0001', {
       method: 'POST',
     }).catch((err) => console.warn('Backend reset error:', err));
 
-    setCompilerState('idle');
+    setCompilerState('failed');
     setCompileStepText('');
     setFindings(compilerService.getInitialFindings());
     setObligations(compilerService.getInitialObligations());
     setEvidenceList(compilerService.getInitialEvidence());
     compilerService.resetDemoState();
-    showToast('Compiler Reset', 'Returned to initial idle state', 'info', 1500);
+    showToast('Reset Complete', 'Returned to initial pending requirements state', 'info', 1500);
   };
 
-  // Are all missing evidence items resolved to VERIFIED?
   const allEvidenceResolved = evidenceList
     .filter((e) => e.id !== 'EVD-04')
     .every((e) => e.status === 'VERIFIED');
 
-  const readiness = compilerService.getReadiness(compilerState === 'ready');
+  const isCertifiedReady = compilerState === 'ready' || readiness.status === 'READY';
+  const isReady = isCertifiedReady;
+  const missingCount = evidenceList.filter((e) => e.status !== 'VERIFIED' && e.id !== 'EVD-04').length;
+
+  const remainingList =
+    readiness.remainingRequirements && readiness.remainingRequirements.length > 0
+      ? readiness.remainingRequirements
+      : isCertifiedReady || allEvidenceResolved
+      ? []
+      : ['IEC approval', 'Site retraining'];
+
+  const remainingCount =
+    readiness.remainingRequirementsCount !== undefined
+      ? readiness.remainingRequirementsCount
+      : remainingList.length;
 
   return (
-    <div className="space-y-6">
-      {/* 1. COMPILER HEADER & ACTIVE CHANGESET CARD */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
+      {/* 1. HEADER & DOCKET CONTEXT */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E5DC] pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-[#2E7D5B] bg-[#EAF4EF] px-2.5 py-0.5 rounded-md border border-[#7FAF91]/40">
-              GOVERNANCE PIPELINE
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-xs font-bold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+              CS-0001
             </span>
-            <Badge variant="info" size="sm" dot>
-              Build Engine v2.4
-            </Badge>
+            <span className="text-xs text-[#5C6B62] font-medium">• Visit 4 Schedule Change</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#26352D] mt-1.5 flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-[#2E7D5B]" />
-            Implementation Compiler
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E2922]">
+            Evidence & Regulatory Validation
           </h1>
-          <p className="text-xs text-[#66736B] mt-0.5">
-            Validate protocol changes and regulatory dependencies before they reach trial operations.
+          <p className="text-xs text-[#5C6B62] mt-0.5">
+            Submit required compliance evidence and validate amendment readiness before rollout.
           </p>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            icon={<LayoutDashboard className="w-4 h-4 text-[#2E7D5B]" />}
-            onClick={() => navigate('/dashboard')}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsAuditOpen(true)}
+            className="px-3.5 py-2 rounded-lg border border-[#E2DFD6] hover:bg-white text-xs font-semibold text-[#1E2922] transition-colors cursor-pointer"
           >
-            DASHBOARD
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            icon={<TrendingUp className="w-4 h-4 text-[#2E7D5B]" />}
-            onClick={() => navigate('/impact')}
-          >
-            VIEW IMPACT
-          </Button>
-          {compilerState !== 'idle' && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => document.getElementById('section-findings')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                FINDINGS
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => document.getElementById('section-obligations')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                OBLIGATIONS
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => document.getElementById('section-evidence')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                EVIDENCE
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                icon={<Clock className="w-4 h-4 text-[#2E7D5B]" />}
-                onClick={() => setIsAuditOpen(true)}
-              >
-                AUDIT TRAIL
-              </Button>
-            </>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-rose-600 hover:bg-rose-50"
-            icon={<RotateCcw className="w-3.5 h-3.5 text-rose-500" />}
+            View provenance
+          </button>
+          <button
             onClick={handleReset}
+            className="p-2 rounded-lg text-[#5C6B62] hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+            title="Reset to initial state"
           >
-            RESET
-          </Button>
+            <RotateCcw className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Active ChangeSet Context Ribbon */}
-      <div className="p-4 rounded-2xl bg-white border border-[#E8E4D9] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-mono font-bold text-[#2E7D5B] bg-[#EAF4EF] px-2.5 py-1 rounded-md border border-[#7FAF91]/40">
-            CS-0001
+      {/* 2. WORKSPACE TAB SWITCHER */}
+      <div className="flex items-center gap-2 border-b border-[#E8E5DC] pb-2">
+        <button
+          onClick={() => setActiveWorkspaceTab('readiness')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+            activeWorkspaceTab === 'readiness'
+              ? 'bg-[#1E4D38] text-white shadow-xs'
+              : 'text-[#5C6B62] hover:bg-white hover:text-[#1E2922] border border-transparent'
+          }`}
+        >
+          Readiness Workspace
+        </button>
+        <button
+          onClick={() => setActiveWorkspaceTab('evidence')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+            activeWorkspaceTab === 'evidence'
+              ? 'bg-[#1E4D38] text-white shadow-xs'
+              : 'text-[#5C6B62] hover:bg-white hover:text-[#1E2922] border border-transparent'
+          }`}
+        >
+          <span>Evidence Dossier</span>
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              activeWorkspaceTab === 'evidence'
+                ? 'bg-white/20 text-white'
+                : 'bg-[#E2DFD6] text-[#5C6B62]'
+            }`}
+          >
+            {evidenceList.length}
           </span>
-          <div>
-            <span className="text-[#66736B] text-[11px] block">Active Study Docket</span>
-            <span className="font-bold text-[#26352D]">ATF-001 — AYU-TRIAL FABRIC Demonstration Trial</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div>
-            <span className="text-[#66736B] text-[10px] block">Target Protocol</span>
-            <span className="text-[#2E7D5B] font-bold">v1.1</span>
-          </div>
-          <div className="h-6 w-px bg-[#E8E4D9]" />
-          <div>
-            <span className="text-[#66736B] text-[10px] block">Modification</span>
-            <span className="text-[#26352D] font-semibold">Visit 4: Day 25–31 → Day 25–35</span>
-          </div>
-        </div>
+        </button>
+        <button
+          onClick={() => setActiveWorkspaceTab('pipeline')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+            activeWorkspaceTab === 'pipeline'
+              ? 'bg-[#1E4D38] text-white shadow-xs'
+              : 'text-[#5C6B62] hover:bg-white hover:text-[#1E2922] border border-transparent'
+          }`}
+        >
+          Rules & Statutory Basis
+        </button>
       </div>
 
-      {/* 2. COMPILER PIPELINE VISUALIZATION */}
-      <Card className="p-5 bg-white border border-[#E8E4D9] shadow-sm rounded-2xl space-y-3">
-        <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-2.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#26352D] font-mono flex items-center gap-1.5">
-            <Layers className="w-4 h-4 text-[#2E7D5B]" />
-            COMPILER PIPELINE
-          </span>
-          <span className="text-[11px] text-[#66736B] font-mono">
-            State: <strong className="text-[#26352D] uppercase">{compilerState}</strong>
+      {/* 3. TAB 1: AMENDMENT READINESS WORKSPACE */}
+      {activeWorkspaceTab === 'readiness' && (
+        <AmendmentReadinessWorkspace
+          changeSetId="CS-0001"
+          readiness={readiness}
+          evidenceList={evidenceList}
+          findings={findings}
+          onOpenUpload={handleOpenUpload}
+          onOpenReview={handleOpenReview}
+          onOpenAudit={() => setIsAuditOpen(true)}
+          onRefresh={async () => {
+            try {
+              const [fRes, oRes, eRes, rRes] = await Promise.all([
+                fetch('/api/v1/compiler/findings?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/obligations?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/evidence?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/readiness?changeSetId=CS-0001'),
+              ]);
+              if (fRes.ok) {
+                const fData = await fRes.json();
+                if (Array.isArray(fData)) setFindings(fData);
+              }
+              if (oRes.ok) {
+                const oData = await oRes.json();
+                if (Array.isArray(oData)) setObligations(oData);
+              }
+              if (eRes.ok) {
+                const eData = await eRes.json();
+                if (Array.isArray(eData)) setEvidenceList(eData);
+              }
+              if (rRes.ok) {
+                const rData = await rRes.json();
+                setReadiness(rData);
+                if (rData.status === 'READY') setCompilerState('ready');
+              }
+            } catch (err) {
+              console.warn('Error refreshing live governance state', err);
+            }
+          }}
+          onNavigateToEvidence={() => setActiveWorkspaceTab('evidence')}
+          isPI={isPI}
+          isCRA={isCRA}
+          isEthics={isEthics}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* 4. TAB 2: EVIDENCE DOSSIER */}
+      {activeWorkspaceTab === 'evidence' && (
+        <EvidenceDossierWorkspace
+          changeSetId="CS-0001"
+          evidenceList={evidenceList}
+          readiness={readiness}
+          findings={findings}
+          onOpenUpload={handleOpenUpload}
+          onOpenReview={handleOpenReview}
+          onOpenAudit={() => setIsAuditOpen(true)}
+          onRefresh={async () => {
+            try {
+              const [fRes, oRes, eRes, rRes] = await Promise.all([
+                fetch('/api/v1/compiler/findings?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/obligations?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/evidence?changeSetId=CS-0001'),
+                fetch('/api/v1/compiler/readiness?changeSetId=CS-0001'),
+              ]);
+              if (fRes.ok) {
+                const fData = await fRes.json();
+                if (Array.isArray(fData)) setFindings(fData);
+              }
+              if (oRes.ok) {
+                const oData = await oRes.json();
+                if (Array.isArray(oData)) setObligations(oData);
+              }
+              if (eRes.ok) {
+                const eData = await eRes.json();
+                if (Array.isArray(eData)) setEvidenceList(eData);
+              }
+              if (rRes.ok) {
+                const rData = await rRes.json();
+                setReadiness(rData);
+                if (rData.status === 'READY') setCompilerState('ready');
+              }
+            } catch (err) {
+              console.warn('Error refreshing live governance state', err);
+            }
+          }}
+          onNavigateToReadiness={() => setActiveWorkspaceTab('readiness')}
+          isPI={isPI}
+          isCRA={isCRA}
+          isEthics={isEthics}
+          isAdmin={isAdmin}
+        />
+      )}
+
+
+  {/* 5. TAB 3: RULES & STATUTORY BASIS & PIPELINE */}
+  {activeWorkspaceTab === 'pipeline' && (
+    <div className="space-y-6">
+      {/* STATUTORY FINDINGS & REGULATORY BASIS */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-6 sm:p-7 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-[#E8E5DC] pb-3">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#1E2922] font-mono">
+              Statutory Findings
+            </h2>
+            <p className="text-xs text-[#5C6B62] mt-0.5">
+              Automated rule evaluation against NDCT 2019, ICMR 2017, and Ayush GCP
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-[#5C6B62]">
+            {findings.length} findings evaluated
           </span>
         </div>
 
-        {/* Pipeline Steps Flow */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 pt-1">
-          {pipelineSteps.map((step, idx) => {
-            const status = getStepStatus(step);
-            const isCurrent =
-              (compilerState === 'compiling' && step === 'RULES') ||
-              (compilerState === 'failed' && step === 'FINDINGS') ||
-              (compilerState === 'recompiling' && step === 'VERIFICATION') ||
-              (compilerState === 'ready' && step === 'READY');
+        <div className="divide-y divide-[#E8E5DC]">
+          {findings.map((f) => {
+            const isResolved = isReady || f.status === 'RESOLVED';
 
             return (
-              <div
-                key={step}
-                className={`p-2.5 rounded-xl border text-center space-y-1 transition-all ${
-                  isCurrent
-                    ? 'bg-[#EAF4EF] border-[#2E7D5B] ring-2 ring-[#2E7D5B]/20 shadow-xs'
-                    : status === 'PASSED'
-                    ? 'bg-[#FAF9F4] border-[#7FAF91]/50 text-[#26352D]'
-                    : status === 'FAILED'
-                    ? 'bg-[#FDF2F2] border-[#FCA5A5] text-[#26352D]'
-                    : 'bg-[#FAF9F4] border-[#E8E4D9] text-[#66736B]'
-                }`}
-              >
-                <div className="text-[10px] font-mono text-[#66736B] font-semibold">
-                  {idx + 1}. {step}
+              <div key={f.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5 max-w-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1E2922]">{f.title}</span>
+                    <span className="text-[10px] font-mono font-semibold text-[#5C6B62]">{f.id}</span>
+                    {isResolved ? (
+                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
+                        Resolved
+                      </span>
+                    ) : f.type === 'BLOCK' ? (
+                      <span className="text-[10px] font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                        Blocker
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Warning
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#5C6B62]">{f.description}</p>
                 </div>
-                <div>{getStepBadge(status)}</div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                  <button
+                    onClick={() => handleExplainFinding(f)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#1E4D38] hover:text-[#163B2B] hover:underline cursor-pointer"
+                  >
+                    <span>View regulatory basis</span>
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
-      </Card>
+      </section>
 
-      {/* 3. COMPILE BUTTON / ANIMATION / STATUS BANNER */}
-      {compilerState === 'idle' && (
-        <Card className="p-8 text-center space-y-3 bg-white border border-[#E8E4D9] shadow-sm rounded-2xl">
-          <div className="p-3 bg-[#EAF4EF] text-[#2E7D5B] rounded-2xl w-fit mx-auto border border-[#7FAF91]/40">
-            <Cpu className="w-8 h-8" />
-          </div>
-          <h3 className="text-base font-bold text-[#26352D]">Execute Pre-Flight Compilation</h3>
-          <p className="text-xs text-[#66736B] max-w-md mx-auto">
-            Evaluate ChangeSet <strong>CS-0001</strong> against protocol dependencies, ethics mandates, and operational site constraints.
-          </p>
-          <div className="pt-2">
-            <Button
-              size="md"
-              className="px-8 py-2.5 font-bold bg-[#2E7D5B] text-white hover:bg-[#246347]"
-              icon={<Play className="w-4 h-4 text-white" />}
-              onClick={handleCompile}
-            >
-              COMPILE CHANGESET
-            </Button>
-          </div>
-        </Card>
-      )}
+      {/* PROGRESSIVE DISCLOSURE: TECHNICAL COMPILATION PIPELINE */}
+      <section className="bg-white border border-[#E2DFD6] rounded-xl p-5 shadow-xs">
+        <button
+          onClick={() => setShowTechDetails(!showTechDetails)}
+          className="w-full flex items-center justify-between text-xs font-semibold text-[#5C6B62] hover:text-[#1E2922] transition-colors cursor-pointer"
+        >
+          <span className="font-mono uppercase tracking-wider">
+            {showTechDetails ? 'Hide technical validation details' : 'View technical validation details (Pipeline & Snapshot)'}
+          </span>
+          {showTechDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
 
-      {/* Compiling / Recompiling Animated Sequence */}
-      {(compilerState === 'compiling' || compilerState === 'recompiling') && (
-        <Card className="p-6 text-center space-y-4 border-[#7FAF91] bg-white shadow-md rounded-2xl animate-slide-up">
-          <div className="w-8 h-8 border-3 border-[#2E7D5B] border-t-transparent rounded-full animate-spin mx-auto" />
-          <div className="space-y-1">
-            <span className="font-mono text-sm font-bold text-[#2E7D5B]">{compileStepText}</span>
-            <p className="text-xs text-[#66736B]">
-              Traversing dependency graph and synthesizing governance obligations
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {/* BUILD FAILED BANNER (Initial Run Result) */}
-      {compilerState === 'failed' && (
-        <div className="p-6 rounded-2xl bg-[#FDF2F2] border border-[#FCA5A5] shadow-sm space-y-3 animate-slide-up">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#FECACA]">
-            <div className="flex items-center gap-2.5">
-              <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
-              <div>
-                <h2 className="text-base font-bold text-rose-900 tracking-tight">BUILD FAILED</h2>
-                <p className="text-xs text-rose-700">
-                  Protocol ChangeSet CS-0001 contains unfulfilled operational and regulatory obligations.
-                </p>
-              </div>
+        {showTechDetails && (
+          <div className="pt-4 space-y-4 border-t border-[#E8E5DC] mt-3 text-xs animate-fade-in">
+            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+              {pipelineSteps.map((step, idx) => {
+                const status = getStepStatus(step);
+                return (
+                  <div
+                    key={step}
+                    className={`p-2 rounded-lg border text-center space-y-0.5 ${
+                      status === 'PASSED'
+                        ? 'bg-[#EAF4EF] border-[#C5DFD2] text-[#1E4D38]'
+                        : status === 'FAILED'
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : 'bg-[#FAF9F4] border-[#E8E5DC] text-[#8C9B91]'
+                    }`}
+                  >
+                    <div className="text-[9px] font-mono font-bold">0{idx + 1}</div>
+                    <div className="text-[10px] font-semibold truncate">{step}</div>
+                    <div className="text-[9px] font-mono font-bold">{status}</div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="flex items-center gap-2">
-              <Badge variant="danger" size="md">
-                3 BLOCKERS
-              </Badge>
-              <Badge variant="warning" size="md">
-                1 WARNING
-              </Badge>
-            </div>
-          </div>
-
-          <p className="text-xs text-rose-800 leading-relaxed">
-            Please resolve the missing required evidence below to unlock formal trial rollout clearance.
-          </p>
-        </div>
-      )}
-
-      {/* BUILD PASSED BANNER (Recompile Success Result) */}
-      {compilerState === 'ready' && (
-        <div className="p-6 rounded-2xl bg-[#EAF4EF] border-2 border-[#2E7D5B] shadow-md space-y-3 animate-slide-up">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#7FAF91]/40">
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-6 h-6 text-[#2E7D5B] shrink-0" />
-              <div>
-                <h2 className="text-base font-bold text-[#26352D] tracking-tight">BUILD PASSED</h2>
-                <p className="text-xs text-[#2E7D5B] font-semibold">
-                  All blocking findings resolved.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="success" size="lg" dot className="font-mono text-xs">
-                IMPLEMENTATION READY
-              </Badge>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#2E7D5B] text-[#2E7D5B] hover:bg-white"
-                icon={<Clock className="w-4 h-4 text-[#2E7D5B]" />}
+            <div className="p-3 bg-[#FAF9F4] border border-[#E8E5DC] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+              <span className="text-[#5C6B62]">
+                Snapshot Run ID: <strong className="text-[#1E2922]">{isReady ? 'CMP-000129' : 'CMP-000128'}</strong>
+              </span>
+              <button
                 onClick={() => setIsAuditOpen(true)}
+                className="text-[#1E4D38] hover:underline font-semibold text-left sm:text-right cursor-pointer"
               >
-                AUDIT TRAIL
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                icon={<LayoutDashboard className="w-4 h-4 text-white" />}
-                onClick={() => navigate('/dashboard')}
-              >
-                RETURN TO DASHBOARD
-              </Button>
+                Inspect SHA-256 Merkle Provenance →
+              </button>
             </div>
           </div>
+        )}
+      </section>
+    </div>
+  )}
 
-          <p className="text-xs text-[#26352D]">
-            All 3 blocking findings have been satisfied with verified documentation. ChangeSet CS-0001 is certified for clinical rollout across Sites 01, 02, and 03.
-          </p>
-        </div>
-      )}
-
-      {/* 4. FINDINGS SECTION */}
-      {compilerState !== 'idle' && (
-        <div id="section-findings">
-          <Card className="space-y-4 p-6 bg-white border border-[#E8E4D9] rounded-2xl shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-3">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#26352D] font-mono">
-                  Compilation Findings
-                </h2>
-                <p className="text-xs text-[#66736B]">
-                  Rule violations and procedural gates identified by the governance compiler
-                </p>
-              </div>
-              <span className="text-xs font-mono text-[#66736B]">{findings.length} Items</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {findings.map((finding) => (
-                <div
-                  key={finding.id}
-                  className={`p-4 rounded-2xl border space-y-2 transition-colors ${
-                    finding.status === 'RESOLVED'
-                      ? 'bg-[#FAF9F4] border-[#7FAF91]/50'
-                      : finding.type === 'BLOCK'
-                      ? 'bg-[#FDF2F2] border-[#FCA5A5]'
-                      : 'bg-[#FEF9C3]/40 border-[#FDE047]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[#26352D]">
-                        {finding.id}
-                      </span>
-                      <Badge
-                        variant={finding.type === 'BLOCK' ? 'danger' : 'warning'}
-                        size="sm"
-                      >
-                        {finding.type}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant={finding.severity === 'HIGH' ? 'danger' : 'warning'} size="sm">
-                        {finding.severity}
-                      </Badge>
-                      <Badge
-                        variant={finding.status === 'RESOLVED' ? 'success' : 'default'}
-                        size="sm"
-                      >
-                        {finding.status}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-[#26352D]">{finding.title}</h4>
-                    <p className="text-xs text-[#66736B] mt-0.5 leading-relaxed">
-                      {finding.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between border-t border-[#E8E4D9]">
-                    <span className="text-[10px] font-mono text-[#66736B]">Statutory Guidance</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-[#2E7D5B] hover:text-[#246347] hover:bg-[#EAF4EF] text-[11px] h-7 px-2"
-                      icon={<Sparkles className="w-3.5 h-3.5 text-[#2E7D5B]" />}
-                      onClick={() => handleExplainFinding(finding)}
-                    >
-                      Explain via Advisory AI
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* 5. IMPLEMENTATION OBLIGATIONS TABLE */}
-      {compilerState !== 'idle' && (
-        <div id="section-obligations">
-          <Card className="p-0 overflow-hidden bg-white border border-[#E8E4D9] rounded-2xl shadow-sm">
-            <div className="p-5 pb-3 flex items-center justify-between border-b border-[#E8E4D9]">
-              <div>
-                <h3 className="text-sm font-semibold text-[#26352D]">Implementation Obligations</h3>
-                <p className="text-xs text-[#66736B]">
-                  Action items assigned to functional trial stakeholder groups
-                </p>
-              </div>
-              <span className="text-xs text-[#66736B] font-mono">Interactive Checklist</span>
-            </div>
-
-            <Table
-              data={obligations}
-              keyExtractor={(o) => o.id}
-              columns={[
-                {
-                  header: 'Obligation',
-                  className: 'min-w-[220px]',
-                  accessor: (o) => (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-[#26352D]">{o.obligation}</span>
-                    </div>
-                  ),
-                },
-                {
-                  header: 'Owner',
-                  accessor: (o) => (
-                    <span className="text-xs text-[#66736B] font-medium">{o.owner}</span>
-                  ),
-                },
-                {
-                  header: 'Status',
-                  className: 'text-right',
-                  accessor: (o) => (
-                    <button
-                      type="button"
-                      onClick={() => toggleObligationStatus(o.id)}
-                      className="cursor-pointer"
-                      title="Click to toggle status"
-                    >
-                      <Badge
-                        variant={o.status === 'COMPLETED' ? 'success' : 'warning'}
-                        size="sm"
-                        dot={o.status === 'OPEN'}
-                      >
-                        {o.status}
-                      </Badge>
-                    </button>
-                  ),
-                },
-              ]}
-            />
-          </Card>
-        </div>
-      )}
-
-      {/* 6. REQUIRED EVIDENCE CARDS */}
-      {compilerState !== 'idle' && (
-        <div id="section-evidence" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#66736B]">
-                Required Evidence
-              </h2>
-              <p className="text-xs text-[#66736B]">
-                Mandatory verification artifacts required to satisfy blocking findings
+      {/* EVIDENCE UPLOAD / SUBMIT MODAL */}
+      <Modal
+        isOpen={isUploadModalOpen}
+        onClose={() => {
+          setIsUploadModalOpen(false);
+          setUploadError('');
+        }}
+        title={selectedUploadItem?.status === 'REJECTED' ? 'Update evidence' : 'Submit evidence'}
+        description="Protocol: AYU-CT-2026-042 · CS-0001 Visit 4 Schedule Change"
+        size="md"
+      >
+        <div className="space-y-4 text-xs">
+          {selectedUploadItem?.status === 'REJECTED' && selectedUploadItem.rejectionReason && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 space-y-1">
+              <span className="font-bold block text-rose-950">Evidence requires revision</span>
+              <p className="text-[11px] text-rose-800">
+                Reviewer: <span className="font-semibold">{selectedUploadItem.reviewerRole || 'Ethics Reviewer'}</span>
+              </p>
+              <p className="text-[11px] italic text-rose-900">
+                &ldquo;{selectedUploadItem.rejectionReason}&rdquo;
               </p>
             </div>
+          )}
 
-            {/* RECOMPILE BUTTON: Appears when all evidence is resolved */}
-            {compilerState === 'failed' && (
-              <Button
-                size="sm"
-                disabled={!allEvidenceResolved}
-                variant={allEvidenceResolved ? 'primary' : 'secondary'}
-                icon={<RotateCcw className="w-4 h-4" />}
-                onClick={handleRecompile}
-              >
-                RECOMPILE
-              </Button>
-            )}
+          <div className="space-y-1">
+            <label className="font-semibold text-[#1E2922] block">Evidence</label>
+            <input
+              type="text"
+              value={selectedUploadItem?.title || ''}
+              disabled
+              className="w-full bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg p-2.5 text-xs text-[#5C6B62] font-semibold cursor-not-allowed"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {evidenceList.map((item) => {
-              const isMissing = item.status === 'MISSING';
-              const isVerified = item.status === 'VERIFIED';
+          <div className="space-y-1">
+            <label className="font-semibold text-[#1E2922] block">Related amendment</label>
+            <input
+              type="text"
+              value="CS-0001"
+              disabled
+              className="w-full bg-[#FAF9F4] border border-[#E2DFD6] rounded-lg p-2.5 text-xs text-[#5C6B62] font-mono cursor-not-allowed"
+            />
+          </div>
 
-              return (
-                <Card
-                  key={item.id}
-                  className={`p-4 space-y-3 border rounded-2xl shadow-xs transition-colors ${
-                    isVerified
-                      ? 'border-[#7FAF91] bg-white'
-                      : isMissing
-                      ? 'border-[#FCA5A5] bg-[#FDF2F2]'
-                      : 'border-[#E8E4D9] bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-bold text-xs text-[#26352D] leading-tight">
-                      {item.title}
-                    </span>
-                    <Badge
-                      variant={
-                        isVerified
-                          ? 'success'
-                          : isMissing
-                          ? 'danger'
-                          : 'info'
-                      }
-                      size="sm"
-                    >
-                      {item.status}
-                    </Badge>
-                  </div>
+          <div className="space-y-1">
+            <label className="font-semibold text-[#1E2922] block">
+              Description <span className="text-rose-600">*</span>
+            </label>
+            <textarea
+              value={uploadDescription}
+              onChange={(e) => {
+                setUploadDescription(e.target.value);
+                if (uploadError) setUploadError('');
+              }}
+              placeholder="Provide documentation notes or dossier details..."
+              className="w-full bg-white border border-[#E2DFD6] rounded-lg p-2.5 text-xs text-[#1E2922] focus:outline-none focus:border-[#1E4D38] min-h-[75px]"
+            />
+          </div>
 
-                  <p className="text-[11px] text-[#66736B] leading-relaxed min-h-[34px]">
-                    {item.fileHint}
-                  </p>
+          <div className="space-y-1.5">
+            <label className="font-semibold text-[#1E2922] block">
+              File <span className="text-rose-600">*</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <label className="px-3.5 py-2 rounded-lg border border-[#E2DFD6] bg-[#FAF9F4] hover:bg-white text-xs font-semibold text-[#1E2922] cursor-pointer transition-colors inline-flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-[#5C6B62]" />
+                <span>Choose file</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setUploadFile(file);
+                      setUploadFileName(file.name);
+                      if (uploadError) setUploadError('');
+                    }
+                  }}
+                />
+              </label>
+              <span className="text-xs font-mono text-[#5C6B62] truncate max-w-[260px]">
+                {uploadFileName || 'No file chosen'}
+              </span>
+            </div>
+          </div>
 
-                  <div className="pt-1">
-                    {isMissing ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full text-xs font-semibold hover:bg-[#2E7D5B] hover:text-white"
-                        onClick={() => handleAddEvidence(item.id)}
-                      >
-                        ADD EVIDENCE
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant={isVerified ? 'secondary' : 'ghost'}
-                        className="w-full text-xs font-semibold cursor-default"
-                        icon={isVerified ? <Check className="w-3.5 h-3.5 text-[#2E7D5B]" /> : undefined}
-                      >
-                        {item.buttonText}
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
+          {uploadError && (
+            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{uploadError}</span>
+            </div>
+          )}
+
+          <div className="pt-3 border-t border-[#E8E5DC] flex justify-end gap-2.5">
+            <button
+              onClick={() => {
+                setIsUploadModalOpen(false);
+                setUploadError('');
+              }}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmitUpload}
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+            >
+              {isSubmitting
+                ? 'Submitting...'
+                : selectedUploadItem?.status === 'REJECTED'
+                ? 'Update evidence'
+                : 'Submit evidence'}
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {/* 8. READINESS SUMMARY CARD (Displayed after build passes) */}
-      {compilerState === 'ready' && (
-        <Card className="p-6 bg-white border border-[#7FAF91] shadow-md space-y-4 rounded-2xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8E4D9] pb-3">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#2E7D5B] font-mono">
-                FINAL CERTIFICATION
-              </span>
-              <h3 className="text-base font-bold text-[#26352D]">Implementation Readiness</h3>
+      {/* EVIDENCE REVIEW / DETAIL DRAWER/MODAL */}
+      <Modal
+        isOpen={isReviewModalOpen}
+        onClose={() => {
+          setIsReviewModalOpen(false);
+          setIsConfirmingApproval(false);
+          setIsRequestingChanges(false);
+          setReviewError('');
+        }}
+        title={
+          isConfirmingApproval
+            ? 'Approve this evidence?'
+            : isRequestingChanges
+            ? 'Request changes'
+            : selectedReviewItem?.status === 'VERIFIED' || selectedReviewItem?.status === 'AVAILABLE'
+            ? 'Evidence Record'
+            : 'Review evidence'
+        }
+        description={
+          isConfirmingApproval
+            ? 'This will mark the evidence as verified and may satisfy a governance requirement.'
+            : isRequestingChanges
+            ? `Provide revision reason for ${selectedReviewItem?.title || ''}`
+            : `Governance verification details for ${selectedReviewItem?.id || ''}`
+        }
+        size="md"
+      >
+        <div className="space-y-4 text-xs">
+          {/* CONFIRMATION VIEW FOR APPROVAL */}
+          {isConfirmingApproval ? (
+            <div className="space-y-4 animate-fade-in">
+              <div className="p-3.5 rounded-xl bg-[#EAF4EF] border border-[#C5DFD2] space-y-2">
+                <div className="flex items-center gap-2 font-bold text-[#1E4D38]">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Approve this evidence?</span>
+                </div>
+                <p className="text-[11px] text-[#5C6B62] leading-relaxed">
+                  This will mark the evidence as verified and may satisfy a governance requirement.
+                </p>
+              </div>
+
+              {reviewError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{reviewError}</span>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-[#E8E5DC] flex justify-end gap-2.5">
+                <button
+                  onClick={() => setIsConfirmingApproval(false)}
+                  disabled={isReviewSubmitting}
+                  className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmApprove}
+                  disabled={isReviewSubmitting}
+                  className="px-5 py-2 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+                >
+                  {isReviewSubmitting ? 'Approving...' : 'Approve evidence'}
+                </button>
+              </div>
             </div>
-            <Badge variant="success" size="lg" dot className="font-mono font-bold">
-              {readiness.status}
-            </Badge>
-          </div>
+          ) : isRequestingChanges ? (
+            /* REQUEST CHANGES VIEW */
+            <div className="space-y-4 animate-fade-in">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-rose-900 block">
+                  Reason <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  value={changeFeedbackNote}
+                  onChange={(e) => {
+                    setChangeFeedbackNote(e.target.value);
+                    if (reviewError) setReviewError('');
+                  }}
+                  placeholder="Please provide the signed IEC notification dossier."
+                  className="w-full bg-white border border-[#E2DFD6] rounded-lg p-2.5 text-xs text-[#1E2922] focus:outline-none focus:border-rose-600 min-h-[90px]"
+                />
+              </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Protocol</span>
-              <span className="font-mono text-sm font-bold text-[#2E7D5B] mt-0.5 block">
-                {readiness.protocol}
-              </span>
+              {reviewError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{reviewError}</span>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-[#E8E5DC] flex justify-end gap-2.5">
+                <button
+                  onClick={() => {
+                    setIsRequestingChanges(false);
+                    setReviewError('');
+                  }}
+                  disabled={isReviewSubmitting}
+                  className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitRequestChanges}
+                  disabled={isReviewSubmitting}
+                  className="px-5 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+                >
+                  {isReviewSubmitting ? 'Submitting...' : 'Request changes'}
+                </button>
+              </div>
             </div>
+          ) : (
+            /* DEFAULT EVIDENCE RECORD / REVIEW VIEW */
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-[#FAF9F4] border border-[#E8E5DC] space-y-3">
+                <div>
+                  <span className="text-[#5C6B62] text-[10px] uppercase font-bold block font-mono">Evidence Name</span>
+                  <span className="font-bold text-[#1E2922] text-xs block mt-0.5">{selectedReviewItem?.title}</span>
+                </div>
 
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">ChangeSet</span>
-              <span className="font-mono text-sm font-bold text-[#26352D] mt-0.5 block">
-                {readiness.changeSet}
-              </span>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-[#5C6B62] block">Related amendment</span>
+                    <span className="font-semibold text-[#1E2922]">CS-0001</span>
+                  </div>
+                  <div>
+                    <span className="text-[#5C6B62] block">Submitted by</span>
+                    <span className="font-semibold text-[#1E2922]">
+                      {selectedReviewItem?.uploadedBy || 'Principal Investigator'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-[#5C6B62] block">Submission timestamp</span>
+                    <span className="font-semibold text-[#1E2922]">
+                      {formatTimestamp(selectedReviewItem?.submittedAt)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#5C6B62] block">Status</span>
+                    <span className="font-semibold text-[#1E2922]">
+                      {selectedReviewItem?.status === 'VERIFIED' || selectedReviewItem?.status === 'AVAILABLE'
+                        ? 'Verified'
+                        : selectedReviewItem?.status === 'SUBMITTED'
+                        ? 'Awaiting review'
+                        : selectedReviewItem?.status === 'REJECTED'
+                        ? 'Changes requested'
+                        : 'Required'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[#5C6B62] text-[10px] uppercase font-bold block font-mono">Description</span>
+                  <p className="text-xs text-[#1E2922] mt-0.5">
+                    {selectedReviewItem?.description || selectedReviewItem?.fileHint || 'Statutory evidence dossier for protocol amendment.'}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-[#E8E5DC]">
+                  <span className="text-[#5C6B62] text-[10px] uppercase font-bold block font-mono">Document / File Information</span>
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-[#1E2922]">
+                    <span className="font-mono">{selectedReviewItem?.fileName || 'evidence_document.pdf'}</span>
+                    <span className="text-[#5C6B62]">1.2 MB</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Bar with Authoritative Role Enforcement */}
+              <div className="pt-3 border-t border-[#E8E5DC] flex items-center justify-between gap-2.5">
+                {selectedReviewItem?.status === 'VERIFIED' || selectedReviewItem?.status === 'AVAILABLE' ? (
+                  <div className="w-full flex justify-end">
+                    <button
+                      onClick={() => setIsReviewModalOpen(false)}
+                      className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : isPI ? (
+                  <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#5C6B62] italic">
+                      Awaiting determination from Ethics Committee / CRA. Reviewer actions are restricted for the Principal Investigator.
+                    </span>
+                    <button
+                      onClick={() => setIsReviewModalOpen(false)}
+                      className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer self-end sm:self-auto"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : isEthics && selectedReviewItem?.id === 'EVD-03' ? (
+                  <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span className="text-[11px] text-amber-800">
+                      Site CRC training logs must be verified by Clinical Research Associate / Monitor.
+                    </span>
+                    <button
+                      onClick={() => setIsReviewModalOpen(false)}
+                      className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer self-end sm:self-auto"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : isCRA && (selectedReviewItem?.id === 'EVD-01' || selectedReviewItem?.id === 'EVD-02') ? (
+                  <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span className="text-[11px] text-amber-800">
+                      IEC notification dossiers and consent addenda require Ethics Reviewer approval.
+                    </span>
+                    <button
+                      onClick={() => setIsReviewModalOpen(false)}
+                      className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer self-end sm:self-auto"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setIsRequestingChanges(true);
+                        setChangeFeedbackNote(selectedReviewItem?.rejectionReason || '');
+                        setReviewError('');
+                      }}
+                      className="px-3.5 py-2 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      Request changes
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsReviewModalOpen(false)}
+                        className="px-3.5 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => setIsConfirmingApproval(true)}
+                        className="px-5 py-2 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      >
+                        {isCRA ? 'Verify & Sign-off' : 'Approve'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
+          )}
+        </div>
+      </Modal>
 
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Sites</span>
-              <span className="text-sm font-bold text-[#26352D] mt-0.5 block">
-                {readiness.sites} Sites
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Participants</span>
-              <span className="text-sm font-bold text-[#26352D] mt-0.5 block">
-                {readiness.participants} Pts
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Blocking Findings</span>
-              <span className="text-sm font-bold text-[#2E7D5B] mt-0.5 block">
-                {readiness.blockingFindings}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Warnings</span>
-              <span className="text-sm font-bold text-amber-700 mt-0.5 block">
-                {readiness.warnings}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-[#FAF9F4] border border-[#E8E4D9]">
-              <span className="text-[#66736B] text-[11px] block">Evidence</span>
-              <span className="font-mono text-sm font-bold text-[#2E7D5B] mt-0.5 block">
-                {readiness.evidence}
-              </span>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Immutable Protocol Audit Trail Modal */}
-      <AuditTrailModal isOpen={isAuditOpen} onClose={() => setIsAuditOpen(false)} />
-
-      {/* Advisory AI Explanation Modal */}
+      {/* ADVISORY REGULATORY GUIDANCE & MERKLE AUDIT TRAIL MODALS */}
       <AdvisoryModal
         isOpen={isAdvisoryOpen}
         onClose={() => setIsAdvisoryOpen(false)}
         data={advisoryData}
         loading={advisoryLoading}
       />
+
+      <AuditTrailModal
+        isOpen={isAuditOpen}
+        onClose={() => setIsAuditOpen(false)}
+      />
+
+      {/* READINESS DETAILS MODAL */}
+      <ReadinessDetailsModal
+        isOpen={isReadinessDetailsOpen}
+        onClose={() => setIsReadinessDetailsOpen(false)}
+        readiness={readiness}
+        evidenceList={evidenceList}
+        findings={findings}
+      />
+
+      {/* PREPARE IMPLEMENTATION CONFIRMATION MODAL */}
+      <Modal
+        isOpen={isPrepareModalOpen}
+        onClose={() => setIsPrepareModalOpen(false)}
+        title="Prepare Amendment Implementation"
+        description="Protocol: AYU-CT-2026-042 · CS-0001 Visit 4 Schedule Change"
+        size="md"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="p-4 rounded-xl bg-[#EAF4EF] border border-[#C5DFD2] space-y-2">
+            <div className="flex items-center gap-2 text-[#1E4D38] font-bold">
+              <CheckCircle2 className="w-5 h-5" />
+              <span>Certified Ready for Implementation</span>
+            </div>
+            <p className="text-[#5C6B62] leading-relaxed text-[11px]">
+              All required statutory governance checks, IEC approvals, consent addenda, and site training logs have been verified against the clinical governance rule engine.
+            </p>
+          </div>
+
+          <div className="space-y-2 border border-[#E8E5DC] rounded-xl p-3.5 bg-[#FAF9F4]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#5C6B62] font-mono block">
+              Implementation Rollout Scope
+            </span>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 bg-white border border-[#E8E5DC] rounded-lg">
+                <span className="text-[10px] text-[#5C6B62] block">Participating Centers</span>
+                <span className="font-bold text-[#1E2922]">3 Sites (Delhi, Jaipur, Jamnagar)</span>
+              </div>
+              <div className="p-2.5 bg-white border border-[#E8E5DC] rounded-lg">
+                <span className="text-[10px] text-[#5C6B62] block">Active Cohort</span>
+                <span className="font-bold text-[#1E2922]">47 Participants</span>
+              </div>
+              <div className="p-2.5 bg-white border border-[#E8E5DC] rounded-lg">
+                <span className="text-[10px] text-[#5C6B62] block">Assessment Target</span>
+                <span className="font-bold text-[#1E2922]">Visit 4 Window (Day 25–35)</span>
+              </div>
+              <div className="p-2.5 bg-white border border-[#E8E5DC] rounded-lg">
+                <span className="text-[10px] text-[#5C6B62] block">Governance Audit</span>
+                <span className="font-bold text-[#1E4D38]">Cryptographic Seal Intact</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-[#E8E5DC] flex justify-end gap-2.5">
+            <button
+              onClick={() => setIsPrepareModalOpen(false)}
+              className="px-4 py-2 rounded-lg border border-[#E2DFD6] text-xs font-semibold text-[#5C6B62] hover:bg-[#FAF9F4] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setIsPrepareModalOpen(false);
+                showToast(
+                  'Implementation Complete',
+                  'Amendment CS-0001 successfully implemented across all 3 research centers',
+                  'success'
+                );
+              }}
+              className="px-5 py-2 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              Confirm rollout implementation
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -44,10 +44,10 @@ export const IntegrationsPage: React.FC = () => {
     },
     {
       name: 'CTRI',
-      type: 'Clinical Registry Gateway',
-      status: 'REVIEW REQUIRED' as const,
-      description: 'National trial registry metadata and recruitment telemetry synchronization.',
-      icon: <AlertTriangle className="w-5 h-5 text-amber-700" />,
+      type: 'Clinical Registry Gateway (Read-Only)',
+      status: 'CONNECTED' as const,
+      description: 'National trial registry public metadata connector with SHA-256 provenance & change detection.',
+      icon: <CheckCircle2 className="w-5 h-5 text-[#2E7D5B]" />,
     },
     {
       name: 'Pharmacovigilance',
