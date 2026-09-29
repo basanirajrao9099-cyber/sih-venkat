@@ -2,6 +2,7 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine, Base
 from app.api import api_router
@@ -15,8 +16,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ayu_trial_fabric")
 
-# Auto-create tables for development/fallback mode
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler: ensures tables and demo seed data exist upon startup."""
+    try:
+        Base.metadata.create_all(bind=engine)
+        from app.seed import seed_database
+        seed_database()
+        logger.info("Database tables and seed records verified on startup.")
+    except Exception as e:
+        logger.warning(f"Startup database initialization notice: {e}")
+    yield
+
 
 app = FastAPI(
     title="Ayu-Trial Fabric - Core Intelligence & Governance API",
@@ -25,6 +37,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 # Configure CORS
