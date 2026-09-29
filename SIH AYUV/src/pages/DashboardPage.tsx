@@ -34,7 +34,276 @@ import { useAuth } from '../hooks/useAuth';
 import { useTrial } from '../hooks/useTrialContext';
 import { ReadinessDetailsModal } from '../components/common/ReadinessDetailsModal';
 import { ChangeSetRecord, getStoredChangeSets } from '../data/changesets';
-import { TrialSwitcherDropdown } from '../components/common/TrialSwitcherDropdown';
+import { ClinicalTrial } from '../types/trial';
+
+interface TrialAmendmentContext {
+  id: string;
+  title: string;
+  previous: string;
+  proposed: string;
+  changeReason: string;
+  piName: string;
+  leadSite: string;
+  sitesCount: number;
+  participantsCount: number;
+  tasks: Array<{
+    id: string;
+    name: string;
+    status: string;
+    statusType: 'required' | 'progress' | 'pending' | 'approved';
+    desc: string;
+    btnText: string;
+    route: string;
+  }>;
+  recentAudits: Array<{
+    id: string;
+    title: string;
+    timestamp: string;
+    description: string;
+  }>;
+}
+
+const getTrialAmendmentContext = (trial: ClinicalTrial): TrialAmendmentContext => {
+  const pid = trial.protocolId || '';
+  const title = trial.title || '';
+
+  if (pid.includes('088') || title.includes('AYUSH-64')) {
+    return {
+      id: 'CS-0002',
+      title: 'AYUSH-64 Dosage & Post-Meal Intake Optimization',
+      previous: 'AYUSH-64: 500mg 2x/day (BD)',
+      proposed: 'AYUSH-64: 500mg 3x/day (TDS) Post-Meal (+1 Dose)',
+      changeReason: 'Optimizes anti-inflammatory bioavailability for moderate Amavata patients.',
+      piName: trial.piName || 'Dr. Devendra Triguna',
+      leadSite: 'National Institute of Ayurveda (NIA), Jaipur',
+      sitesCount: trial.activeSites || 5,
+      participantsCount: trial.targetEnrollment || 180,
+      tasks: [
+        {
+          id: 'task-1',
+          name: 'Drug Safety Monitoring Board (DSMB) Dosage Clearance',
+          status: 'Required',
+          statusType: 'required',
+          desc: 'Pharmacovigilance sign-off for TDS 500mg daily regimen under NDCT 2019 Rule 26',
+          btnText: 'Review & Upload',
+          route: '/compiler',
+        },
+        {
+          id: 'task-2',
+          name: 'ACR-20 Amavata eCRF Modification',
+          status: '2 of 5 completed',
+          statusType: 'progress',
+          desc: 'Joint swelling and morning stiffness assessment window update across 5 hospitals',
+          btnText: 'View sites',
+          route: '/sites',
+        },
+        {
+          id: 'task-3',
+          name: 'Patient Dosage Counseling Addendum',
+          status: 'Awaiting verification',
+          statusType: 'pending',
+          desc: 'Patient instruction leaflet update for 180 active enrolled participants',
+          btnText: 'View evidence',
+          route: '/compiler',
+        },
+      ],
+      recentAudits: [
+        { id: 'act-1', title: 'AYUSH-64 Dose Amendment Drafted (CS-0002)', timestamp: '10m ago', description: 'Proposed 500mg TDS dose escalation across 5 centers' },
+        { id: 'act-2', title: 'NIA Jaipur Site Operational Audit', timestamp: '1h ago', description: 'Center verified active cohort of 36 participants' },
+        { id: 'act-3', title: 'DSMB Safety Review Initiated', timestamp: '4h ago', description: 'Central regulatory dossier submitted for expedited vote' },
+      ],
+    };
+  }
+
+  if (pid.includes('105') || title.includes('Curcumin')) {
+    return {
+      id: 'CS-0003',
+      title: 'WOMAC Score & Inclusion Age Expansion (45–75 yrs)',
+      previous: 'Age: 50–65 yrs (WOMAC > 50)',
+      proposed: 'Age: 45–75 yrs (WOMAC > 40) Expanded Inclusion',
+      changeReason: 'Broadens real-world accessibility and accelerates participant accrual.',
+      piName: trial.piName || 'Prof. Sanjeev Sharma',
+      leadSite: 'Institute of Post Graduate Teaching & Research in Ayurveda, Jamnagar',
+      sitesCount: trial.activeSites || 6,
+      participantsCount: trial.targetEnrollment || 240,
+      tasks: [
+        {
+          id: 'task-1',
+          name: 'Institutional Ethics Board Age Expansion Dossier',
+          status: 'Required',
+          statusType: 'required',
+          desc: 'Fast-track ethics clearance for expanded age bracket under ICMR 2017 standards',
+          btnText: 'Review & Upload',
+          route: '/compiler',
+        },
+        {
+          id: 'task-2',
+          name: 'Investigator Site Screening Calibration',
+          status: '3 of 6 completed',
+          statusType: 'progress',
+          desc: 'WOMAC index scoring harmonization across 6 participating orthopedic centers',
+          btnText: 'View sites',
+          route: '/sites',
+        },
+        {
+          id: 'task-3',
+          name: 'Informed Consent Form (ICF v1.2)',
+          status: 'Awaiting verification',
+          statusType: 'pending',
+          desc: 'Updated vernacular language consent sheets for expanded cohort',
+          btnText: 'View evidence',
+          route: '/compiler',
+        },
+      ],
+      recentAudits: [
+        { id: 'act-1', title: 'Inclusion Criteria Amendment CS-0003 Created', timestamp: '15m ago', description: 'Age range widened to 45–75 yrs with WOMAC threshold 40' },
+        { id: 'act-2', title: 'IPGTRA Jamnagar Ethics Review', timestamp: '2h ago', description: 'Institutional board dossier logged' },
+        { id: 'act-3', title: 'Orthopedic Biomarker Panel Verification', timestamp: '5h ago', description: 'Cartilage imaging SOP synchronized' },
+      ],
+    };
+  }
+
+  if (pid.includes('121') || title.includes('Triphala')) {
+    return {
+      id: 'CS-0004',
+      title: 'HbA1c & LFT Safety Diagnostic Window Adjustment',
+      previous: 'Testing Window: Every 30 Days (±2d)',
+      proposed: 'Testing Window: 45-Day Flex Schedule (±5d)',
+      changeReason: 'Accommodates multi-center lab processing without protocol breach.',
+      piName: trial.piName || 'Dr. Vaidya K.S. Dhiman',
+      leadSite: 'Central Ayurveda Research Institute (CARI), Bengaluru',
+      sitesCount: trial.activeSites || 10,
+      participantsCount: trial.targetEnrollment || 400,
+      tasks: [
+        {
+          id: 'task-1',
+          name: 'NABL Central Lab SOP Addendum',
+          status: 'Required',
+          statusType: 'required',
+          desc: 'Quality assurance protocol for extended metabolic sample analysis',
+          btnText: 'Review & Upload',
+          route: '/compiler',
+        },
+        {
+          id: 'task-2',
+          name: 'Site Phlebotomy & CRC Briefings',
+          status: '7 of 10 completed',
+          statusType: 'progress',
+          desc: 'Blood draw and fasting glucose synchronization across 10 centers',
+          btnText: 'View sites',
+          route: '/sites',
+        },
+        {
+          id: 'task-3',
+          name: 'Patient Visit Schedule Card v2.0',
+          status: 'Awaiting verification',
+          statusType: 'pending',
+          desc: 'Distributed to 400 enrolled Type 2 Diabetes participants',
+          btnText: 'View evidence',
+          route: '/compiler',
+        },
+      ],
+      recentAudits: [
+        { id: 'act-1', title: 'Lab Diagnostic Window Shift CS-0004', timestamp: '20m ago', description: 'Shifted sample window to 45 days' },
+        { id: 'act-2', title: 'CARI Bengaluru Site Sign-off', timestamp: '3h ago', description: 'Lead center finalized operational schedule' },
+      ],
+    };
+  }
+
+  if (pid.includes('149') || title.includes('Brahmi')) {
+    return {
+      id: 'CS-0005',
+      title: 'Shirodhara Procedure Session Duration Flexibility',
+      previous: 'Procedure Duration: Strict 45 mins',
+      proposed: 'Procedure Duration: 40–50 mins Tolerant Window',
+      changeReason: 'Allows therapist calibration for autonomic nervous system stabilization.',
+      piName: trial.piName || 'Dr. B.R. Ramakrishna',
+      leadSite: 'NIMHANS Integrative Medicine Unit, Bengaluru',
+      sitesCount: trial.activeSites || 3,
+      participantsCount: trial.targetEnrollment || 120,
+      tasks: [
+        {
+          id: 'task-1',
+          name: 'Panchakarma Protocol SOP Certification',
+          status: 'Required',
+          statusType: 'required',
+          desc: 'Standard operating procedure sign-off for continuous Brahmi Taila flow',
+          btnText: 'Review & Upload',
+          route: '/compiler',
+        },
+        {
+          id: 'task-2',
+          name: 'Therapist Calibration Sign-offs',
+          status: '2 of 3 completed',
+          statusType: 'progress',
+          desc: 'HAM-A anxiety score evaluation synchronization across centers',
+          btnText: 'View sites',
+          route: '/sites',
+        },
+        {
+          id: 'task-3',
+          name: 'Subject Relaxation Diary Update',
+          status: 'Awaiting verification',
+          statusType: 'pending',
+          desc: 'Home compliance logs for 120 enrolled subjects',
+          btnText: 'View evidence',
+          route: '/compiler',
+        },
+      ],
+      recentAudits: [
+        { id: 'act-1', title: 'Shirodhara Procedure Change CS-0005', timestamp: '25m ago', description: 'Session duration window adjusted to 40-50m' },
+        { id: 'act-2', title: 'NIMHANS Ethics Initial Submission', timestamp: '5h ago', description: 'Expedited review dossier logged' },
+      ],
+    };
+  }
+
+  // Default Ashwagandha / Standard
+  return {
+    id: 'CS-0001',
+    title: 'Visit 4 Schedule & Window Modification',
+    previous: 'Visit 4 Window: Day 25–31',
+    proposed: 'Visit 4 Window: Day 25–35 (+4 Days)',
+    changeReason: 'Rescues 100% of participants from protocol dropout due to holiday transit.',
+    piName: trial.piName || 'Prof. Dr. Anandita Sharma',
+    leadSite: 'All India Institute of Ayurveda (AIIA), New Delhi',
+    sitesCount: trial.activeSites || 3,
+    participantsCount: trial.targetEnrollment || 140,
+    tasks: [
+      {
+        id: 'task-1',
+        name: 'IEC notification dossier',
+        status: 'Required',
+        statusType: 'required',
+        desc: 'Required before clinical implementation under NDCT 2019 Rule 26',
+        btnText: 'Review & Upload',
+        route: '/compiler',
+      },
+      {
+        id: 'task-2',
+        name: 'Site retraining records',
+        status: '2 of 3 completed',
+        statusType: 'progress',
+        desc: 'CRC visit-window operational briefing sign-offs across centers',
+        btnText: 'View sites',
+        route: '/sites',
+      },
+      {
+        id: 'task-3',
+        name: 'Updated informed consent (ICF Addendum)',
+        status: 'Awaiting verification',
+        statusType: 'pending',
+        desc: 'Patient Information Sheet v1.1 addendum for active enrolled participants',
+        btnText: 'View evidence',
+        route: '/compiler',
+      },
+    ],
+    recentAudits: [
+      { id: 'act-1', title: 'Protocol Amendment CS-0001 Created', timestamp: '30m ago', description: 'Visit 4 window shifted from Day 25–31 to Day 25–35' },
+      { id: 'act-2', title: 'Site Retraining Completed', timestamp: '2h ago', description: 'AIIA New Delhi signed off on CRC operational briefing logs' },
+      { id: 'act-3', title: 'IEC Notification Dossier Submitted', timestamp: '4h ago', description: 'Institutional Ethics Committee review pending for ChangeSet CS-0001' },
+    ],
+  };
+};
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -47,40 +316,26 @@ export const DashboardPage: React.FC = () => {
   const isCRA = currentUser.role === 'Monitor';
   const isAdmin = currentUser.role === 'Admin';
 
+  const trialCtx = getTrialAmendmentContext(selectedTrial);
+
   const [readiness, setReadiness] = useState<ReadinessSummary>(compilerService.getReadiness());
   const [evidenceList, setEvidenceList] = useState<EvidenceItem[]>(compilerService.getInitialEvidence());
   const [findings, setFindings] = useState<Finding[]>(compilerService.getInitialFindings());
-  const [auditEvents, setAuditEvents] = useState<any[]>([]);
-  const [activeCS, setActiveCS] = useState<ChangeSetRecord | null>(null);
   const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadAll = async () => {
       try {
-        const [csList, rData, eData, fData, aData] = await Promise.all([
-          compilerService.fetchChangeSets(),
-          compilerService.fetchReadiness('CS-0001'),
-          compilerService.fetchEvidence('CS-0001'),
-          compilerService.fetchFindings('CS-0001'),
-          compilerService.fetchAuditTrail('CS-0001'),
+        const [rData, eData, fData] = await Promise.all([
+          compilerService.fetchReadiness(trialCtx.id),
+          compilerService.fetchEvidence(trialCtx.id),
+          compilerService.fetchFindings(trialCtx.id),
         ]);
-
-        if (Array.isArray(csList) && csList.length > 0) {
-          setActiveCS(csList[0]);
-        } else {
-          const stored = getStoredChangeSets();
-          if (stored.length > 0) setActiveCS(stored[0]);
-        }
 
         if (rData) setReadiness(rData);
         if (eData) setEvidenceList(eData);
         if (fData) setFindings(fData);
-        if (Array.isArray(aData) && aData.length > 0) {
-          setAuditEvents([...aData].reverse().slice(0, 4));
-        } else {
-          setAuditEvents([]);
-        }
       } catch (err) {
         console.warn('Dashboard fetch error:', err);
       } finally {
@@ -107,32 +362,22 @@ export const DashboardPage: React.FC = () => {
   const allGovernanceChecksCompleted =
     missingEvidenceCount === 0 && (readiness.blockingFindings === 0 || isCertifiedReady);
 
-  // Dynamic status and next action derived from actual backend changeset state
-  const csStatus = activeCS?.status || 'Draft';
-  const isCsDraft = csStatus === 'Draft' || csStatus === 'DRAFT';
-  const isCsImpactAnalyzed = csStatus === 'Impact analyzed';
-
   // Role-specific Next Actions
-  let readinessDisplayTag = 'NOT READY';
+  let readinessDisplayTag = 'REQUIREMENTS IN PROGRESS';
   let nextActionLabel = 'Resolve requirements →';
   let nextActionRoute = '/compiler';
-  let nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
+  let nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain for ${trialCtx.id}.`;
 
   if (isEthics) {
     readinessDisplayTag = 'IN REVIEW';
     nextActionLabel = 'Review pending evidence dossiers →';
     nextActionRoute = '/compiler';
-    nextActionDesc = `${missingEvidenceCount > 0 ? missingEvidenceCount : 2} regulatory review items require committee decision.`;
+    nextActionDesc = `${missingEvidenceCount > 0 ? missingEvidenceCount : 2} regulatory review items require committee decision for ${trialCtx.id}.`;
   } else if (isCRA) {
     readinessDisplayTag = 'MONITORING ACTIVE';
     nextActionLabel = 'Verify site training logs →';
     nextActionRoute = '/compiler';
-    nextActionDesc = 'Site training logs across centers require CRA sign-off.';
-  } else if (isCsDraft) {
-    readinessDisplayTag = 'DRAFT';
-    nextActionLabel = 'Run impact analysis →';
-    nextActionRoute = '/changesets';
-    nextActionDesc = `Amendment ${activeCS?.id || 'CS-0001'} is saved as draft. Run impact analysis to evaluate affected sites and cohort.`;
+    nextActionDesc = `Site training logs across ${trialCtx.sitesCount} centers require CRA sign-off.`;
   } else if (isCertifiedReady) {
     readinessDisplayTag = 'READY';
     nextActionLabel = 'Prepare implementation →';
@@ -143,33 +388,23 @@ export const DashboardPage: React.FC = () => {
     nextActionLabel = 'Validate amendment →';
     nextActionRoute = '/compiler';
     nextActionDesc = 'All required governance checks have been completed.';
-  } else if (isCsImpactAnalyzed) {
-    readinessDisplayTag = 'IMPACT ANALYZED';
-    nextActionLabel = 'Review requirements →';
-    nextActionRoute = `/compiler?changeSetId=${encodeURIComponent(activeCS?.id || 'CS-0001')}`;
-    nextActionDesc = `Impact analysis completed. Resolve ${remainingCount} remaining statutory requirements.`;
-  } else {
-    readinessDisplayTag = 'REQUIREMENTS IN PROGRESS';
-    nextActionLabel = 'Resolve requirements →';
-    nextActionRoute = '/compiler';
-    nextActionDesc = `${remainingCount} requirement${remainingCount === 1 ? '' : 's'} remain.`;
   }
 
   // Steppers tailored per role
   const piSteps = [
-    { name: 'Draft', route: '/changesets', isCompleted: true, isCurrent: isCsDraft },
-    { name: 'Impact', route: '/impact', isCompleted: !isCsDraft, isCurrent: isCsImpactAnalyzed },
+    { name: 'Draft', route: '/changesets', isCompleted: true, isCurrent: false },
+    { name: 'Impact', route: '/impact', isCompleted: true, isCurrent: false },
     {
       name: 'Resolve',
       route: '/compiler',
       isCompleted: isCertifiedReady,
-      isCurrent: !isCertifiedReady && !isCsDraft && missingEvidenceCount > 0,
+      isCurrent: !isCertifiedReady && missingEvidenceCount > 0,
     },
     {
       name: 'Evidence',
       route: '/compiler',
       isCompleted: isCertifiedReady || missingEvidenceCount === 0,
-      isCurrent: !isCertifiedReady && !isCsDraft && missingEvidenceCount === 0,
+      isCurrent: !isCertifiedReady && missingEvidenceCount === 0,
     },
     { name: 'Review', route: '/ethics', isCompleted: isCertifiedReady, isCurrent: false },
     { name: 'Ready', route: '/compiler', isCompleted: isCertifiedReady, isCurrent: false },
@@ -261,7 +496,7 @@ export const DashboardPage: React.FC = () => {
                 </span>
               )}
               <span className="text-xs text-[#5C6B62]">
-                {selectedTrial.activeSites || 3} Apex Research Centers · {selectedTrial.targetEnrollment || 140} Subjects
+                {trialCtx.sitesCount} Apex Research Centers · {trialCtx.participantsCount} Subjects
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E2922]">
@@ -271,7 +506,7 @@ export const DashboardPage: React.FC = () => {
               <strong>Formulation:</strong> {selectedTrial.formulation} — <em>{selectedTrial.indication}</em>
             </p>
             <p className="text-[11px] text-slate-500">
-              <strong>Lead Investigator / Sponsor:</strong> {selectedTrial.piName || 'Prof. Dr. Anandita Sharma'} • {selectedTrial.sponsor}
+              <strong>Lead Investigator / Sponsor:</strong> {trialCtx.piName} ({trialCtx.leadSite}) • {selectedTrial.sponsor}
             </p>
           </div>
 
@@ -289,10 +524,10 @@ export const DashboardPage: React.FC = () => {
                 <ChevronRight className="w-3.5 h-3.5 text-[#5C6B62] group-hover:text-[#1E4D38] group-hover:translate-x-0.5 transition-all" />
               </div>
               <p className="font-bold text-[#1E2922] group-hover:text-[#1E4D38] transition-colors">
-                {activeCS?.title || activeCS?.type || 'Visit 4 Schedule Change'}
+                {trialCtx.title}
               </p>
               <span className="text-[10px] font-mono text-[#5C6B62]">
-                {activeCS?.id || 'CS-0001'}
+                {trialCtx.id}
               </span>
             </button>
 
@@ -308,8 +543,6 @@ export const DashboardPage: React.FC = () => {
                     ? 'bg-[#1E4D38]'
                     : allGovernanceChecksCompleted
                     ? 'bg-[#5E826F]'
-                    : isCsDraft
-                    ? 'bg-amber-500'
                     : 'bg-amber-600'
                 }`}
               />
@@ -339,7 +572,7 @@ export const DashboardPage: React.FC = () => {
             </h2>
           </div>
           <p className="text-xs text-[#5C6B62] mt-1">
-            Clear explanation of what changes can be made, statutory procedures, required files, and approver permissions.
+            Real-time parameters, statutory requirements, and authorized signatures for <strong>{selectedTrial.shortTitle}</strong>.
           </p>
         </div>
 
@@ -352,10 +585,10 @@ export const DashboardPage: React.FC = () => {
             </div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">1. What You Can Change</h3>
             <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
-              <li><strong>Visit Windows:</strong> Extend or shrink visit days (e.g. Day 25–31 &rarr; Day 25–35).</li>
+              <li><strong>Visit Windows:</strong> Extend or shrink visit days.</li>
               <li><strong>Herbal Formulations:</strong> Dosage timing & extract purity specs.</li>
-              <li><strong>Lab Biomarkers:</strong> Liver LFT & kidney KFT cutoff safety bounds.</li>
-              <li><strong>Inclusion Criteria:</strong> Age ranges and symptom severity thresholds.</li>
+              <li><strong>Lab Biomarkers:</strong> Liver LFT & kidney KFT cutoff bounds.</li>
+              <li><strong>Inclusion Criteria:</strong> Age ranges and symptom scores.</li>
             </ul>
           </div>
 
@@ -404,16 +637,16 @@ export const DashboardPage: React.FC = () => {
             </div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">4. Approvers Needed</h3>
             <ul className="text-xs text-slate-600 space-y-1.5">
-              <li className="p-1 rounded bg-white border border-slate-200">
-                <span className="font-bold text-slate-800 block text-[11px]">Lead PI (Prof. Dr. Sharma)</span>
+              <li className="p-1.5 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px] truncate">Lead PI ({trialCtx.piName.split(',')[0]})</span>
                 <span className="text-[10px] text-emerald-700 font-semibold">Protocol Sign-off</span>
               </li>
-              <li className="p-1 rounded bg-white border border-slate-200">
-                <span className="font-bold text-slate-800 block text-[11px]">Ethics Chair (Dr. Kulkarni)</span>
+              <li className="p-1.5 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px]">Ethics Chair (Dr. Rajesh Kulkarni)</span>
                 <span className="text-[10px] text-amber-700 font-semibold">Expedited Ethics Clearance</span>
               </li>
-              <li className="p-1 rounded bg-white border border-slate-200">
-                <span className="font-bold text-slate-800 block text-[11px]">CRA Monitor (Priya Nair)</span>
+              <li className="p-1.5 rounded bg-white border border-slate-200">
+                <span className="font-bold text-slate-800 block text-[11px]">Lead CRA (Priya Nair)</span>
                 <span className="text-[10px] text-sky-700 font-semibold">Site Readiness Verification</span>
               </li>
             </ul>
@@ -426,7 +659,7 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shrink-0" />
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-950 font-mono">
-                Live Change Verification (Active Amendment CS-0001)
+                Live Change Verification (Active Amendment {trialCtx.id})
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-200/70 text-emerald-900 font-bold">
@@ -436,14 +669,14 @@ export const DashboardPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div className="bg-white p-3 rounded-lg border border-emerald-200">
-              <span className="text-[10px] text-slate-500 uppercase font-bold block">Previous (Baseline)</span>
-              <p className="font-bold text-red-700 line-through mt-0.5">Visit 4 Window: Day 25–31</p>
-              <p className="text-[11px] text-slate-500 mt-1">Causes 7 participant dropouts due to narrow window.</p>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Previous (Baseline Protocol)</span>
+              <p className="font-bold text-red-700 line-through mt-0.5">{trialCtx.previous}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Requires amendment to prevent clinical non-compliance.</p>
             </div>
             <div className="bg-white p-3 rounded-lg border border-emerald-200">
-              <span className="text-[10px] text-slate-500 uppercase font-bold block">Proposed (Amended)</span>
-              <p className="font-bold text-emerald-700 mt-0.5">Visit 4 Window: Day 25–35 (+4 Days)</p>
-              <p className="text-[11px] text-slate-500 mt-1">Rescues 100% of participants without protocol breach.</p>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Proposed (Amended Protocol)</span>
+              <p className="font-bold text-emerald-700 mt-0.5">{trialCtx.proposed}</p>
+              <p className="text-[11px] text-slate-500 mt-1">{trialCtx.changeReason}</p>
             </div>
             <div className="bg-white p-3 rounded-lg border border-emerald-200 flex flex-col justify-between">
               <div>
@@ -536,143 +769,40 @@ export const DashboardPage: React.FC = () => {
                 : 'What Needs Your Attention'}
             </h2>
             <p className="text-xs text-[#5C6B62] mt-0.5">
-              {isEthics
-                ? 'Regulatory submissions requiring Institutional Ethics Committee vote or sign-off'
-                : isCRA
-                ? 'Clinical research center operational briefing and training verifications'
-                : 'Action items required for regulatory certification'}
+              Action items required for {selectedTrial.shortTitle} ({trialCtx.id}) regulatory certification
             </p>
           </div>
           <span className="text-xs font-semibold text-[#5C6B62]">
-            {isReady ? '0 pending items' : `${blockingCount} pending items`}
+            {isReady ? '0 pending items' : `${trialCtx.tasks.length} pending items`}
           </span>
         </div>
 
         <div className="divide-y divide-[#E8E5DC]">
-          {isEthics ? (
-            <>
-              {/* Ethics Task 1 */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">IEC notification dossier (EVD-01)</span>
-                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Review Pending
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    ChangeSet CS-0001 schedule modification requires formal IEC expedited acknowledgment.
-                  </p>
+          {trialCtx.tasks.map((task) => (
+            <div key={task.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#1E2922]">{task.name}</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                    task.statusType === 'required'
+                      ? 'text-amber-800 bg-amber-50 border-amber-200'
+                      : task.statusType === 'progress'
+                      ? 'text-sky-800 bg-sky-50 border-sky-200'
+                      : 'text-[#1E4D38] bg-[#EAF4EF] border-[#C5DFD2]'
+                  }`}>
+                    {task.status}
+                  </span>
                 </div>
-                <button
-                  onClick={() => navigate('/compiler')}
-                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
-                >
-                  Review evidence
-                </button>
+                <p className="text-xs text-[#5C6B62]">{task.desc}</p>
               </div>
-
-              {/* Ethics Task 2 */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">Informed Consent Addendum v1.1 (EVD-02)</span>
-                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Review Pending
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Patient Information Sheet addendum for active participants under ICMR 2017.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/compiler')}
-                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
-                >
-                  Review evidence
-                </button>
-              </div>
-            </>
-          ) : isCRA ? (
-            <>
-              {/* CRA Task 1 */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">Site CRC Retraining Logs (EVD-03)</span>
-                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Sign-off Required
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Multi-center training sign-offs across research centers.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/compiler')}
-                  className="px-4 py-1.5 rounded-lg bg-[#1E4D38] hover:bg-[#163B2B] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
-                >
-                  Verify training
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* PI Task 1: IEC Notification */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">IEC notification dossier</span>
-                    {isReady ? (
-                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                        Approved
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        Required
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    Required before clinical implementation under NDCT 2019 Rule 26
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/compiler')}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
-                >
-                  {isReady ? 'View record' : 'Review & Upload'}
-                </button>
-              </div>
-
-              {/* PI Task 2: Site Retraining */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1E2922]">Site retraining records</span>
-                    {isReady ? (
-                      <span className="text-[10px] font-semibold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
-                        3 of 3 completed
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        2 of 3 completed
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[#5C6B62]">
-                    CRC visit-window operational briefing sign-offs across centers
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/sites')}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
-                >
-                  View sites
-                </button>
-              </div>
-            </>
-          )}
+              <button
+                onClick={() => navigate(task.route)}
+                className="px-3.5 py-1.5 rounded-lg border border-[#E2DFD6] hover:bg-[#FAF9F4] text-xs font-semibold text-[#1E2922] transition-colors shrink-0 cursor-pointer"
+              >
+                {task.btnText}
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -685,14 +815,10 @@ export const DashboardPage: React.FC = () => {
               {isEthics ? 'Ethics Impact Scope' : isCRA ? 'Site Operational Scope' : 'Impact Summary'}
             </span>
             <p className="text-base font-bold text-[#1E2922]">
-              {selectedTrial.activeSites || 3} sites · {selectedTrial.targetEnrollment || 140} participants · 1 visit · 1 CRF
+              {trialCtx.sitesCount} sites · {trialCtx.participantsCount} participants · 1 visit · 1 CRF
             </p>
             <p className="text-xs text-[#5C6B62] leading-relaxed">
-              {isEthics
-                ? 'Amendment affects Visit 4 window across active participants requiring ethics notification and consent addendum.'
-                : isCRA
-                ? 'Visit tolerance bounds updated across study centers requiring CRC re-briefing.'
-                : 'This amendment affects visit windows and assessment schedules for ongoing participant cohorts.'}
+              Amendment {trialCtx.id} targets {trialCtx.title} across {trialCtx.sitesCount} research hospitals.
             </p>
           </div>
 
@@ -718,31 +844,25 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div className="space-y-2.5 pt-1">
-              {auditEvents.length > 0 ? (
-                auditEvents.map((act) => (
-                  <button
-                    key={act.id}
-                    onClick={() => navigate('/changesets')}
-                    className="w-full text-left space-y-0.5 hover:bg-[#FAF9F4] p-1.5 -mx-1.5 rounded-lg transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[#1E2922] group-hover:text-[#1E4D38] truncate transition-colors">
-                        {act.title}
-                      </span>
-                      <span className="text-[10px] text-[#8C9B91] shrink-0 font-medium font-mono">
-                        {act.timestamp}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#5C6B62] leading-tight truncate">
-                      {act.description || act.why || act.what}
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <div className="py-4 text-center text-xs text-[#5C6B62]">
-                  No recent audit activity recorded yet.
-                </div>
-              )}
+              {trialCtx.recentAudits.map((act) => (
+                <button
+                  key={act.id}
+                  onClick={() => navigate('/changesets')}
+                  className="w-full text-left space-y-0.5 hover:bg-[#FAF9F4] p-1.5 -mx-1.5 rounded-lg transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[#1E2922] group-hover:text-[#1E4D38] truncate transition-colors">
+                      {act.title}
+                    </span>
+                    <span className="text-[10px] text-[#8C9B91] shrink-0 font-medium font-mono">
+                      {act.timestamp}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#5C6B62] leading-tight truncate">
+                    {act.description}
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
 
