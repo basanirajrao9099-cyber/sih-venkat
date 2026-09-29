@@ -230,9 +230,9 @@ export const DashboardPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               onClick={openGuide}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/30 hover:scale-[1.02] cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-md shadow-emerald-950/20 cursor-pointer"
             >
-              <Gamepad2 className="w-4 h-4 animate-bounce" />
+              <Gamepad2 className="w-4 h-4" />
               <span>Launch Controls Demo</span>
             </button>
             <button
@@ -424,7 +424,7 @@ export const DashboardPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shrink-0" />
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-950 font-mono">
                 Live Change Verification (Active Amendment CS-0001)
               </span>

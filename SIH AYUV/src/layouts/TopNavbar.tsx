@@ -100,7 +100,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-6 bg-white/95 backdrop-blur-md border-b border-[#E8E5DC] shadow-xs">
+    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-6 bg-white border-b border-[#E8E5DC] shadow-xs">
       {/* Left side: Hamburger & Medicine Trial Dropdown */}
       <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <button
@@ -169,10 +169,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMenuClick }) => {
         {/* Game Guide Walkthrough Trigger */}
         <button
           onClick={openGuide}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white hover:from-emerald-700 hover:to-teal-800 text-xs font-bold shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold shadow-xs transition-all cursor-pointer"
           title="Interactive Platform Guide & Controls Demo"
         >
-          <Gamepad2 className="w-4 h-4 animate-bounce" />
+          <Gamepad2 className="w-4 h-4" />
           <span className="hidden sm:inline">How It Works / Guide</span>
         </button>
 

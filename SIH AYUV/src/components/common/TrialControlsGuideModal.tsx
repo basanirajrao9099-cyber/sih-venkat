@@ -272,7 +272,7 @@ export const TrialControlsGuideModal: React.FC<GuideModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 gpu-accelerated animate-fade-in">
       <div className="bg-[#FAF9F4] border border-slate-300 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-5 bg-white border-b border-slate-200 flex items-center justify-between">

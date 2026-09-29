@@ -60,7 +60,7 @@ export const FetchCTRIModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 gpu-accelerated animate-fade-in">
       <div
         className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
         role="dialog"
@@ -69,8 +69,8 @@ export const FetchCTRIModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <Globe className="w-5 h-5 text-emerald-100 animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center border border-white/30">
+              <Globe className="w-5 h-5 text-emerald-100" />
             </div>
             <div>
               <h2 className="text-lg font-bold">Import Real Medicine Trial from CTRI</h2>

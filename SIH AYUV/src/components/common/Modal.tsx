@@ -43,17 +43,17 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 gpu-accelerated">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-[#26352D]/40 backdrop-blur-sm transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-slate-950/75 transition-opacity animate-fade-in"
         onClick={onClose}
       />
 
       {/* Modal Card */}
       <div
         className={cn(
-          'relative z-10 w-full rounded-2xl bg-white border border-[#E8E4D9] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#26352D] animate-slide-up',
+          'relative z-10 w-full rounded-2xl bg-white border border-[#E8E4D9] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#26352D] animate-fade-in',
           sizeStyles[size],
           className
         )}
