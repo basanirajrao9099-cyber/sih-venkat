@@ -10,9 +10,12 @@ Base = declarative_base()
 def get_engine():
     """
     PostgreSQL-first engine with connection recycling.
-    If PostgreSQL is unreachable in local dev without docker, falls back to SQLite seamlessly.
+    Normalizes Render postgres:// URLs to postgresql:// and falls back to SQLite if unreachable.
     """
     database_url = settings.DATABASE_URL
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+
     try:
         if database_url.startswith("sqlite"):
             engine = create_engine(database_url, connect_args={"check_same_thread": False})
@@ -40,7 +43,7 @@ def get_engine():
         )
 
 def ensure_sqlite_schema(engine_instance):
-    """Safely ensure new CTRI columns exist in SQLite tables if running SQLite."""
+    """Safely ensure new CTRI and governance columns exist in SQLite tables if running SQLite."""
     try:
         if "sqlite" in str(engine_instance.url):
             from sqlalchemy import inspect, text
@@ -67,6 +70,8 @@ def ensure_sqlite_schema(engine_instance):
                         ("source_registry", "VARCHAR"),
                         ("source_url", "VARCHAR"),
                         ("source_fetched_at", "VARCHAR"),
+                        ("source_hash", "VARCHAR"),
+                        ("source_mode", "VARCHAR"),
                     ]
                     for name, col_type in trial_new:
                         if name not in cols:
@@ -86,9 +91,14 @@ def ensure_sqlite_schema(engine_instance):
                     for name, col_type in site_new:
                         if name not in cols:
                             conn.execute(text(f"ALTER TABLE sites ADD COLUMN {name} {col_type}"))
+                if "changesets" in tables:
+                    cols = [c["name"] for c in inspector.get_columns("changesets")]
+                    if "lifecycle_state" not in cols:
+                        conn.execute(text("ALTER TABLE changesets ADD COLUMN lifecycle_state VARCHAR"))
                 conn.commit()
     except Exception as e:
         logger.warning(f"Schema check notice: {e}")
+
 
 engine = get_engine()
 ensure_sqlite_schema(engine)
