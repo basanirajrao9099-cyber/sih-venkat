@@ -16,13 +16,32 @@ export async function mockFetch<T>(data: T, delayMs: number = DEFAULT_DELAY_MS):
   return JSON.parse(JSON.stringify(data));
 }
 
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+  if (envUrl) {
+    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+      return `https://${envUrl}`;
+    }
+    return envUrl;
+  }
+
+  // Automatic production Render detection
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname.includes('onrender.com')) {
+      return 'https://ayu-trial-fabric-api.onrender.com';
+    }
+  }
+
+  return '';
+}
+
 export async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit,
   fallbackData?: T
 ): Promise<T> {
   try {
-    const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+    const apiBaseUrl = getApiBaseUrl();
     const fullUrl = endpoint.startsWith('http') ? endpoint : `${apiBaseUrl}${endpoint}`;
 
     const activeRole =
@@ -38,9 +57,21 @@ export async function apiFetch<T>(
         ...(options?.headers || {}),
       },
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${res.statusText}`);
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const bodyText = await res.text();
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}: ${res.statusText}`);
+      }
+      throw new Error(`Invalid response format from API (received ${contentType || 'non-JSON'}). Backend may be waking up.`);
     }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `API error ${res.status}: ${res.statusText}`);
+    }
+
     const data = await res.json();
     return data as T;
   } catch (err) {
@@ -51,4 +82,5 @@ export async function apiFetch<T>(
     throw err;
   }
 }
+
 
