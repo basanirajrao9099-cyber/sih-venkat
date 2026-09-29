@@ -116,30 +116,100 @@ export const ImpactPage: React.FC = () => {
     created: 'Today',
   };
 
-  // Generate dynamic, rich profile for the active trial and changeset
+  // Generate dynamic, rich profile strictly driven by the chosen ChangeSet / Amendment
   const getImpactProfile = (): TrialImpactProfile => {
-    const isAyush64 = selectedTrial.protocolId.includes('088') || selectedCs.id === 'CS-0002';
-    const isCurcumin = selectedTrial.protocolId.includes('105') || selectedCs.id === 'CS-0003';
-    const isTriphala = selectedTrial.protocolId.includes('121') || selectedCs.id === 'CS-0004';
-    const isBrahmi = selectedTrial.protocolId.includes('149') || selectedCs.id === 'CS-0005';
+    const csId = selectedCs.id;
+    const csType = (selectedCs.type || '').toLowerCase();
+    const csChange = (selectedCs.change || '').toLowerCase();
+    const csTitle = (selectedCs.title || '').toLowerCase();
 
-    if (isAyush64) {
+    // 1. Visit Schedule Modification (CS-0001)
+    if (csId === 'CS-0001' || csType.includes('visit') || csChange.includes('day 25')) {
       return {
-        scopeTitle: 'Dosage & Posology Optimization Amendment',
-        scopeSubtitle: 'Posology increase to 500mg TDS post-meal across moderate Amavata patient cohorts',
+        scopeTitle: selectedCs.title || 'Visit 4 Schedule Window Modification',
+        scopeSubtitle: selectedCs.reason || 'Scheduling variation across multi-center research sites while maintaining protocol compliance',
+        sitesCount: 3,
+        totalSites: 8,
+        cohortCount: 47,
+        affectedParameterName: 'Visit Schedule',
+        affectedParameterValue: selectedCs.change || 'Day 25–35 (+4 Days Flex)',
+        crfCount: 1,
+        crfName: 'CRF-04: Visit 4 Clinical Assessment Form',
+        crfDetail: 'REDCap Instrument ID: crf_visit_04_v1 · Parameter Parity: Day 25–35',
+        targetEntityTitle: 'Target Assessment Window',
+        currentValue: selectedCs.previousState || 'Day 25–31 (7 Days)',
+        proposedValue: selectedCs.newState || 'Day 25–35 (11 Days, +4 Days Flex)',
+        whySitesAffected: 'Only investigational centers with active cohorts approaching the Visit 4 milestone are affected.',
+        whyCohortAffected: '47 active participants currently enrolled in the schedule timeline approaching Visit 4.',
+        whyParameterAffected: 'The amendment explicitly modifies the assessment window bounds for Visit 4 to prevent scheduling dropouts.',
+        whyCrfAffected: 'Electronic Case Report Form validation logic must match physical protocol window bounds.',
+        consentTitle: 'Patient Information Sheet (PIS v1.1 Addendum)',
+        consentDetail: 'Must be provided to all 47 ongoing participants to notify them of the 4-day flex window for their Day 25–35 clinical follow-up appointment.',
+        trainingTitle: 'Site CRC Protocol Briefing Sign-Off',
+        trainingDetail: 'Clinical research coordinators across AIIA Delhi, NIA Jaipur, and IPGT Jamnagar must complete a 15-minute briefing on the new window.',
+        ethicsTitle: 'Institutional Ethics Committee (IEC) Notification Required',
+        ethicsDetail: 'Expedited ethics notification dossier must be acknowledged by the Institutional Ethics Committee prior to deploying the amendment.',
+        sites: [
+          { siteId: 'SITE-01', name: 'All India Institute of Ayurveda (AIIA)', location: 'New Delhi', investigator: 'Prof. Dr. Anandita Sharma', participantsCount: 18, impactStatus: 'AFFECTED', trainingStatus: 'VERIFIED' },
+          { siteId: 'SITE-02', name: 'National Institute of Ayurveda (NIA)', location: 'Jaipur', investigator: 'Dr. Rajeshwar Varma', participantsCount: 15, impactStatus: 'AFFECTED', trainingStatus: 'COMPLETED' },
+          { siteId: 'SITE-03', name: 'Institute of Teaching & Research in Ayurveda (ITRA)', location: 'Jamnagar', investigator: 'Dr. Meenakshi Bhatt', participantsCount: 14, impactStatus: 'AFFECTED', trainingStatus: 'REQUIRED' },
+        ],
+      };
+    }
+
+    // 2. Dosage Increase / Escalation (CS-0006 or custom 500mg -> 600mg)
+    if (csId === 'CS-0006' || csChange.includes('600 mg') || csChange.includes('600mg')) {
+      return {
+        scopeTitle: selectedCs.title || 'Dosage Titration & Posology Escalation (500mg → 600mg)',
+        scopeSubtitle: selectedCs.reason || 'Optimizing bioavailability and therapeutic blood plasma levels in patient cohorts',
+        sitesCount: 4,
+        totalSites: selectedTrial.activeSites || 6,
+        cohortCount: 96,
+        affectedParameterName: 'Dosage Concentration',
+        affectedParameterValue: '600 mg Formulation (+20%)',
+        crfCount: 2,
+        crfName: 'CRF-06: Drug Dispensation & Pharmacovigilance Log',
+        crfDetail: 'REDCap Instrument ID: crf_drug_dispensation_v1.3 · Posology: 600 mg Formulation',
+        targetEntityTitle: 'Investigational Product Daily Dosing Concentration',
+        currentValue: selectedCs.previousState || '500 mg Formulated Dose',
+        proposedValue: selectedCs.newState || '600 mg Optimized Dose (+100 mg)',
+        whySitesAffected: 'Dispensing pharmacies across 4 clinical sites must update bottle labels and batch accountability sheets.',
+        whyCohortAffected: '96 enrolled participants on the active treatment arm require updated dosage instructions and pill count checks.',
+        whyParameterAffected: 'Bioavailability study indicates 600mg provides sustained clinical efficacy without increasing adverse events.',
+        whyCrfAffected: 'Drug dispensation and compliance verification eCRFs must reflect the 600mg dosage entry limits.',
+        consentTitle: 'Patient Information Sheet (PIS v1.3 Dosage Escalation Addendum)',
+        consentDetail: 'Mandatory informed consent addendum explaining the 600mg dose adjustment and GI tolerance safety instructions.',
+        trainingTitle: 'Pharmacy & CRC Drug Dispensation Retraining',
+        trainingDetail: 'Clinical research coordinators and pharmacists must verify batch release certificates and patient counseling logs for 600mg.',
+        ethicsTitle: 'IEC & DSMB Safety Clearance Notification',
+        ethicsDetail: 'Submitted to the Data Safety Monitoring Board (DSMB) and Institutional Ethics Committee under NDCT 2019 Rule 26.',
+        sites: [
+          { siteId: 'SITE-01', name: 'National Institute of Ayurveda (NIA)', location: 'Jaipur', investigator: 'Prof. Sanjeev Sharma', participantsCount: 32, impactStatus: 'AFFECTED', trainingStatus: 'VERIFIED' },
+          { siteId: 'SITE-02', name: 'AIIMS Department of Integrative Medicine', location: 'New Delhi', investigator: 'Dr. R. M. Pandey', participantsCount: 28, impactStatus: 'AFFECTED', trainingStatus: 'COMPLETED' },
+          { siteId: 'SITE-03', name: 'Government Ayurvedic College', location: 'Guwahati', investigator: 'Dr. B. K. Goswami', participantsCount: 20, impactStatus: 'AFFECTED', trainingStatus: 'REQUIRED' },
+          { siteId: 'SITE-04', name: 'Institute of Teaching & Research in Ayurveda (ITRA)', location: 'Jamnagar', investigator: 'Dr. Meenakshi Bhatt', participantsCount: 16, impactStatus: 'AFFECTED', trainingStatus: 'REQUIRED' },
+        ],
+      };
+    }
+
+    // 3. AYUSH-64 Posology / Frequency Optimization (CS-0002)
+    if (csId === 'CS-0002' || (csType.includes('dosage') && !csChange.includes('600'))) {
+      return {
+        scopeTitle: selectedCs.title || 'AYUSH-64 Dosage & Post-Meal Intake Optimization',
+        scopeSubtitle: selectedCs.reason || 'Optimizes anti-inflammatory bioavailability and joint symptom relief in moderate Amavata patients',
         sitesCount: 5,
         totalSites: 5,
-        cohortCount: selectedTrial.enrolledCount || 172,
+        cohortCount: 172,
         affectedParameterName: 'Dosage Schedule',
-        affectedParameterValue: '500mg TDS',
+        affectedParameterValue: '500mg 3x/day (TDS)',
         crfCount: 2,
         crfName: 'CRF-03: Drug Accountability & ACR-20 Form',
         crfDetail: 'REDCap Instrument ID: crf_posology_v1.2 · Parameter: 500mg TDS Post-Meal Intake',
         targetEntityTitle: 'Investigational Product Dosing Regimen',
-        currentValue: 'AYUSH-64: 500mg 2x/day (BD)',
-        proposedValue: 'AYUSH-64: 500mg 3x/day (TDS) Post-Meal (+1 Dose)',
-        whySitesAffected: 'All participating rheumatoid research centers must receive updated blister packaging and log sheets.',
-        whyCohortAffected: `${selectedTrial.enrolledCount || 172} enrolled active subjects require updated posology compliance instructions.`,
+        currentValue: selectedCs.previousState || 'AYUSH-64: 500mg 2x/day (BD)',
+        proposedValue: selectedCs.newState || 'AYUSH-64: 500mg 3x/day (TDS) Post-Meal (+1 Dose)',
+        whySitesAffected: 'All participating rheumatoid research centers must receive updated blister packaging and accountability log sheets.',
+        whyCohortAffected: '172 enrolled active subjects require updated posology compliance instructions and intake diaries.',
         whyParameterAffected: 'The amendment optimizes anti-inflammatory bioavailability by adding a post-meal midday dose.',
         whyCrfAffected: 'Drug dispensation and ACR-20 symptom score forms require updated morning/afternoon/evening timestamps.',
         consentTitle: 'Patient Information Leaflet (PIL v1.2 Posology Addendum)',
@@ -158,23 +228,24 @@ export const ImpactPage: React.FC = () => {
       };
     }
 
-    if (isCurcumin) {
+    // 4. Curcumin Inclusion Criteria / WOMAC (CS-0003)
+    if (csId === 'CS-0003' || csType.includes('inclusion') || csType.includes('criteria') || csChange.includes('womac') || csChange.includes('age 45')) {
       return {
-        scopeTitle: 'Inclusion Criteria & WOMAC Score Scope Expansion',
-        scopeSubtitle: 'Broadening eligibility age to 45–75 years and WOMAC pain cutoff to >40 points',
+        scopeTitle: selectedCs.title || 'Inclusion Criteria & WOMAC Score Scope Expansion',
+        scopeSubtitle: selectedCs.reason || 'Broadening eligibility age to 45–75 years and WOMAC pain cutoff to >40 points',
         sitesCount: 6,
         totalSites: 6,
-        cohortCount: selectedTrial.enrolledCount || 148,
+        cohortCount: 148,
         affectedParameterName: 'Eligibility Criteria',
         affectedParameterValue: 'Age 45–75 (WOMAC >40)',
         crfCount: 1,
         crfName: 'CRF-01: Eligibility Screening & Baseline Radiography',
         crfDetail: 'REDCap Instrument ID: crf_screening_v2.0 · Parameter: Age 45–75 & Kellgren-Lawrence Grade II/III',
         targetEntityTitle: 'Subject Inclusion & Stratification Criteria',
-        currentValue: 'Age: 50–65 yrs (WOMAC Pain Index > 50)',
-        proposedValue: 'Age: 45–75 yrs (WOMAC Pain Index > 40 Expanded)',
+        currentValue: selectedCs.previousState || 'Age: 50–65 yrs (WOMAC Pain Index > 50)',
+        proposedValue: selectedCs.newState || 'Age: 45–75 yrs (WOMAC Pain Index > 40 Expanded)',
         whySitesAffected: 'All 6 investigational centers must recalibrate screening filters to enroll expanded geriatric cohorts.',
-        whyCohortAffected: `${selectedTrial.enrolledCount || 148} active participants currently enrolled + new recruitment tier opened immediately.`,
+        whyCohortAffected: '148 active participants currently enrolled + new recruitment tier opened immediately.',
         whyParameterAffected: 'Protocol amendment accelerates recruitment accrual across senior osteoarthritis patient demographics.',
         whyCrfAffected: 'Screening validation script bounds updated from 50–65 to 45–75 years in the Electronic Data Capture engine.',
         consentTitle: 'Informed Consent Form (ICF v2.0 Geriatric Addendum)',
@@ -194,23 +265,24 @@ export const ImpactPage: React.FC = () => {
       };
     }
 
-    if (isTriphala) {
+    // 5. Triphala Lab Assessment Window (CS-0004)
+    if (csId === 'CS-0004' || csType.includes('lab') || csType.includes('biomarker') || csChange.includes('45-day')) {
       return {
-        scopeTitle: 'Central NABL Lab Diagnostic Window Calibration',
-        scopeSubtitle: 'Flexibility adjustment for HbA1c, fasting glucose, and LFT panel batch laboratory evaluations',
-        sitesCount: selectedTrial.activeSites || 10,
-        totalSites: selectedTrial.activeSites || 10,
-        cohortCount: selectedTrial.enrolledCount || 395,
+        scopeTitle: selectedCs.title || 'Central NABL Lab Diagnostic Window Calibration',
+        scopeSubtitle: selectedCs.reason || 'Flexibility adjustment for HbA1c, fasting glucose, and LFT panel batch laboratory evaluations',
+        sitesCount: 10,
+        totalSites: 10,
+        cohortCount: 395,
         affectedParameterName: 'Lab Evaluation Window',
         affectedParameterValue: '45-Day Flex Schedule',
         crfCount: 2,
         crfName: 'CRF-05: Central Lab Transmittal & Metabolic Panel',
         crfDetail: 'REDCap Instrument ID: crf_lab_metabolic_v1.3 · Parameter: 45-Day Window (±5 Days)',
         targetEntityTitle: 'Safety Biomarker & Metabolic Evaluation Window',
-        currentValue: 'Testing: Every 30 Days (±2 Days Strict)',
-        proposedValue: 'Testing: 45-Day Flex Schedule (±5 Days Tolerance)',
+        currentValue: selectedCs.previousState || 'Testing: Every 30 Days (±2 Days Strict)',
+        proposedValue: selectedCs.newState || 'Testing: 45-Day Flex Schedule (±5 Days Tolerance)',
         whySitesAffected: 'All 10 research centers shipping blood draws to the central NABL accredited laboratory are synchronized.',
-        whyCohortAffected: `${selectedTrial.enrolledCount || 395} enrolled T2DM participants transition to the calibrated 45-day testing interval.`,
+        whyCohortAffected: '395 enrolled T2DM participants transition to the calibrated 45-day testing interval.',
         whyParameterAffected: 'Prevents logistical batch testing delays from generating false protocol deviation compliance flags.',
         whyCrfAffected: 'Electronic Data Capture logic updated to accept sample submissions up to Day 45 (±5d flex tolerance).',
         consentTitle: 'Participant Follow-up & Lab Schedule Notice Card',
@@ -229,23 +301,24 @@ export const ImpactPage: React.FC = () => {
       };
     }
 
-    if (isBrahmi) {
+    // 6. Brahmi Shirodhara Procedure (CS-0005)
+    if (csId === 'CS-0005' || csType.includes('procedure') || csChange.includes('shirodhara') || csChange.includes('40–50')) {
       return {
-        scopeTitle: 'Panchakarma Procedure Tolerance Window Adjustment',
-        scopeSubtitle: 'Shirodhara therapy session duration window adjusted from strict 45m to 40–50m flex',
+        scopeTitle: selectedCs.title || 'Panchakarma Procedure Tolerance Window Adjustment',
+        scopeSubtitle: selectedCs.reason || 'Shirodhara therapy session duration window adjusted from strict 45m to 40–50m flex',
         sitesCount: 3,
         totalSites: 3,
-        cohortCount: selectedTrial.enrolledCount || 120,
+        cohortCount: 120,
         affectedParameterName: 'Procedure Window',
         affectedParameterValue: '40–50 mins flex',
         crfCount: 1,
         crfName: 'CRF-02: Shirodhara Procedure & HAM-A Anxiety Log',
         crfDetail: 'REDCap Instrument ID: crf_shirodhara_proc_v1.1 · Parameter: 40–50 min session log',
         targetEntityTitle: 'Panchakarma Procedure Duration & Tolerability',
-        currentValue: 'Procedure Duration: Strict 45 mins',
-        proposedValue: 'Procedure Duration: 40–50 mins flex window (+5m tolerance)',
+        currentValue: selectedCs.previousState || 'Procedure Duration: Strict 45 mins',
+        proposedValue: selectedCs.newState || 'Procedure Duration: 40–50 mins flex window (+5m tolerance)',
         whySitesAffected: 'Panchakarma therapy units across NIMHANS and partner Ayurvedic centers must calibrate flow timing.',
-        whyCohortAffected: `${selectedTrial.enrolledCount || 120} participants with Generalized Anxiety Disorder benefit from personalized autonomic stabilization.`,
+        whyCohortAffected: '120 participants with Generalized Anxiety Disorder benefit from personalized autonomic stabilization.',
         whyParameterAffected: 'Allows therapist calibration based on real-time blood pressure and pulse autonomic stabilization.',
         whyCrfAffected: 'Procedure logging form updated to accept start/end timestamps within the 40–50 minute tolerance range.',
         consentTitle: 'Therapy Procedure Information Addendum',
@@ -262,35 +335,35 @@ export const ImpactPage: React.FC = () => {
       };
     }
 
-    // Default Ashwagandha / Custom trial
+    // Default Fallback: Dynamically generate profile from selectedCs properties
     return {
-      scopeTitle: selectedCs.title || 'Visit 4 Schedule Window Modification',
-      scopeSubtitle: selectedCs.reason || 'Scheduling variation across multi-center research sites while maintaining protocol compliance',
+      scopeTitle: selectedCs.title || `${selectedCs.type} Amendment Analysis`,
+      scopeSubtitle: selectedCs.reason || `Operational dependency analysis for ${selectedCs.change}`,
       sitesCount: selectedTrial.activeSites || 3,
-      totalSites: selectedTrial.activeSites || 8,
-      cohortCount: selectedTrial.enrolledCount ? Math.min(selectedTrial.enrolledCount, 47) : 47,
-      affectedParameterName: 'Visit 4 Window',
-      affectedParameterValue: selectedCs.change || 'Day 25–35 (+4 Days)',
+      totalSites: selectedTrial.activeSites || 6,
+      cohortCount: selectedTrial.enrolledCount ? Math.min(selectedTrial.enrolledCount, 85) : 47,
+      affectedParameterName: selectedCs.type || 'Protocol Parameter',
+      affectedParameterValue: selectedCs.change || 'Modified Specification',
       crfCount: 1,
-      crfName: 'CRF-04: Visit 4 Clinical Assessment Form',
-      crfDetail: 'REDCap Instrument ID: crf_visit_04_v1 · Parameter Parity: Day 25–35',
-      targetEntityTitle: 'Visit 4 (Mid-Treatment Assessment)',
-      currentValue: selectedCs.previousState || 'Day 25–31 (7 Days)',
-      proposedValue: selectedCs.newState || 'Day 25–35 (11 Days, +4 Days Flex)',
-      whySitesAffected: 'Only these investigational centers have active patient cohorts approaching the Visit 4 window milestone.',
-      whyCohortAffected: 'Active participants currently enrolled in the schedule timeline approaching the Visit 4 milestone.',
-      whyParameterAffected: 'The amendment explicitly modifies the assessment window bounds for Visit 4 to prevent scheduling dropouts.',
-      whyCrfAffected: 'Electronic Case Report Form validation logic must match physical protocol window bounds.',
-      consentTitle: 'Patient Information Sheet (PIS v1.1 Addendum)',
-      consentDetail: 'Must be provided to all ongoing participants to notify them of the 4-day flex window for their Day 25–35 clinical follow-up appointment.',
-      trainingTitle: 'Site CRC Protocol Briefing Sign-Off',
-      trainingDetail: `All research coordinators across ${selectedTrial.sponsor || 'participating study centers'} must complete a 15-minute briefing on the new window and submit training logs.`,
-      ethicsTitle: 'Institutional Ethics Committee (IEC) Notification Required',
-      ethicsDetail: 'Expedited ethics notification dossier must be acknowledged by the Institutional Ethics Committee prior to deploying the amendment.',
+      crfName: `CRF-01: ${selectedCs.type || 'Protocol'} Compliance Form`,
+      crfDetail: `REDCap Instrument ID: crf_${(selectedCs.type || 'generic').toLowerCase().replace(/[^a-z0-9]/g, '_')}_v1.1`,
+      targetEntityTitle: selectedCs.section || 'Protocol Specification',
+      currentValue: selectedCs.previousState || 'Baseline Value',
+      proposedValue: selectedCs.newState || 'Proposed Specification',
+      whySitesAffected: 'Investigational study centers with active cohorts impacted by this amendment require operational alignment.',
+      whyCohortAffected: `Active patient cohorts impacted by this ${selectedCs.type || 'protocol'} modification.`,
+      whyParameterAffected: selectedCs.reason || 'Amendment updates study parameter tolerances to maintain clinical rigor.',
+      whyCrfAffected: 'Electronic Case Report Form validation logic must match physical protocol specification.',
+      consentTitle: `Informed Consent Addendum (${selectedCs.protocol || 'v1.1'})`,
+      consentDetail: 'Patient information sheet addendum notifying subjects of the amended protocol parameters.',
+      trainingTitle: 'Site Investigator & CRC Protocol Sign-Off',
+      trainingDetail: `Research coordinators across all study sites must review the updated ${selectedCs.type} specification.`,
+      ethicsTitle: 'Institutional Ethics Committee (IEC) Notification',
+      ethicsDetail: 'Submitted under NDCT 2019 Rule 26 for ethics committee notification and acknowledgment.',
       sites: [
-        { siteId: 'SITE-01', name: 'All India Institute of Ayurveda (AIIA)', location: 'New Delhi', investigator: selectedTrial.piName || 'Prof. Dr. Anandita Sharma', participantsCount: 18, impactStatus: 'AFFECTED', trainingStatus: 'VERIFIED' },
-        { siteId: 'SITE-02', name: 'National Institute of Ayurveda (NIA)', location: 'Jaipur', investigator: 'Dr. Rajeshwar Varma', participantsCount: 15, impactStatus: 'AFFECTED', trainingStatus: 'COMPLETED' },
-        { siteId: 'SITE-03', name: 'Institute of Teaching & Research in Ayurveda (ITRA)', location: 'Jamnagar', investigator: 'Dr. Meenakshi Bhatt', participantsCount: 14, impactStatus: 'AFFECTED', trainingStatus: 'REQUIRED' },
+        { siteId: 'SITE-01', name: 'All India Institute of Ayurveda (AIIA)', location: 'New Delhi', investigator: selectedTrial.piName || 'Prof. Dr. Anandita Sharma', participantsCount: 30, impactStatus: 'AFFECTED', trainingStatus: 'VERIFIED' },
+        { siteId: 'SITE-02', name: 'National Institute of Ayurveda (NIA)', location: 'Jaipur', investigator: 'Dr. Rajeshwar Varma', participantsCount: 25, impactStatus: 'AFFECTED', trainingStatus: 'COMPLETED' },
+        { siteId: 'SITE-03', name: 'Institute of Teaching & Research in Ayurveda (ITRA)', location: 'Jamnagar', investigator: 'Dr. Meenakshi Bhatt', participantsCount: 20, impactStatus: 'AFFECTED', trainingStatus: 'REQUIRED' },
       ],
     };
   };
@@ -306,9 +379,9 @@ export const ImpactPage: React.FC = () => {
             <span className="font-mono text-xs font-bold text-[#1E4D38] bg-[#EAF4EF] px-2 py-0.5 rounded border border-[#C5DFD2]">
               {selectedCs.id}
             </span>
-            <span className="text-xs text-[#5C6B62] font-medium">• {selectedTrial.shortTitle || selectedTrial.title}</span>
+            <span className="text-xs text-[#5C6B62] font-medium">• {selectedCs.trialName || selectedTrial.shortTitle || selectedTrial.title}</span>
             <span className="text-[10px] font-mono text-[#8B6B18] bg-[#FEF6E9] px-2 py-0.5 rounded border border-[#E8C28A]/50">
-              {selectedTrial.protocolId}
+              {selectedCs.trialId || selectedTrial.protocolId}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E2922]">
